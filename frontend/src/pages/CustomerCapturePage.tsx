@@ -123,29 +123,35 @@ export const CustomerCapturePage = () => {
   const isActive = session?.status === "ACTIVE" && !result;
   const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
   const contextLabel = getCaptureContextLabel(result?.session.ownerType ?? session?.ownerType ?? "sale");
+  const startedAtLabel = session?.createdAt
+    ? new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+  const expiresAtLabel = session?.expiresAt
+    ? new Date(session.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
 
   return (
     <div className="page-shell customer-capture-shell">
       <section className="card customer-capture-card">
         <div className="customer-capture-heading">
-          <span className="status-badge">Customer capture</span>
-          <h1>Share your contact details</h1>
+          <span className="status-badge status-complete">Tap opened a secure customer form</span>
+          <h1>Share your details for this {contextLabel}</h1>
           <p className="muted-text">
-            Add your details to this {contextLabel} so the shop can attach them to today&apos;s checkout quickly and accurately.
+            This takes under a minute. Enter your name and at least one contact method so staff can attach it to today&apos;s {contextLabel}.
           </p>
         </div>
 
         {loading ? <p>Loading link...</p> : null}
 
         {!loading && !token ? (
-          <div className="quick-create-panel">
+          <div className="quick-create-panel customer-capture-state-card">
             <strong>No active customer capture yet</strong>
-            <p className="muted-text">Ask staff to start Customer Link on the till, then tap your phone or open the link again.</p>
+            <p className="muted-text">Ask staff to start a new tap request on the till, then tap your phone again.</p>
           </div>
         ) : null}
 
         {!loading && loadError ? (
-          <div className="quick-create-panel">
+          <div className="quick-create-panel customer-capture-state-card">
             <strong>Link unavailable</strong>
             <p className="muted-text">{loadError}</p>
             <div className="actions-inline">
@@ -174,43 +180,54 @@ export const CustomerCapturePage = () => {
         ) : null}
 
         {!loading && !loadError && session?.status === "COMPLETED" && !result ? (
-          <div className="quick-create-panel">
+          <div className="quick-create-panel customer-capture-state-card">
             <strong>Details already submitted</strong>
             <p className="muted-text">
-              This customer capture link has already been completed and the {contextLabel} should now show the attached customer back on the till.
+              This customer capture link has already been completed and staff should now see the attached customer back on the till.
             </p>
             <p className="muted-text">
-              If staff still need anything else, ask them to generate a fresh link rather than reusing this one.
+              If anything still looks wrong, ask staff to start a fresh tap request rather than reusing this page.
             </p>
           </div>
         ) : null}
 
         {!loading && !loadError && isReplaced ? (
-          <div className="quick-create-panel">
+          <div className="quick-create-panel customer-capture-state-card">
             <strong>Link replaced</strong>
             <p className="muted-text">
-              Staff have already generated a newer customer capture link for this sale, so this older link is no longer active.
+              Staff have already generated a newer customer capture link, so this older one is no longer active.
             </p>
             <p className="muted-text">
-              Please tap the latest customer link or ask them to reopen the newest one.
+              Please use the newest tap request instead.
             </p>
           </div>
         ) : null}
 
         {!loading && !loadError && session?.status === "EXPIRED" && !isReplaced ? (
-          <div className="quick-create-panel">
+          <div className="quick-create-panel customer-capture-state-card">
             <strong>Link expired</strong>
             <p className="muted-text">
               This customer capture link expired before it was used.
             </p>
             <p className="muted-text">
-              Please ask staff for a fresh link and try again.
+              Please ask staff for a fresh tap request and try again.
             </p>
           </div>
         ) : null}
 
         {isActive ? (
           <form className="customer-capture-form" onSubmit={handleSubmit} data-testid="customer-capture-form">
+            <div className="quick-create-panel customer-capture-state-card customer-capture-active-note">
+              <strong>Check your details, then submit</strong>
+              <p className="muted-text">
+                The shop will use this to identify you quickly and attach the right customer record.
+              </p>
+              <div className="customer-capture-meta">
+                <span>Started {startedAtLabel || "just now"}</span>
+                <span>Expires {expiresAtLabel || "soon"}</span>
+              </div>
+            </div>
+
             <div className="customer-capture-grid">
               <label>
                 First name
@@ -220,6 +237,7 @@ export const CustomerCapturePage = () => {
                   onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
                   autoComplete="given-name"
                   placeholder="Alex"
+                  autoFocus
                   disabled={submitting}
                   required
                 />
@@ -263,7 +281,7 @@ export const CustomerCapturePage = () => {
             </div>
 
             <p className="muted-text">
-              Enter first and last name, plus at least one contact method. Short accurate details work best for fast checkout follow-up.
+              Enter your first and last name, plus either email or phone. Accurate details make checkout and follow-up faster.
             </p>
 
             {submitError ? <p className="customer-capture-error">{submitError}</p> : null}
@@ -271,12 +289,6 @@ export const CustomerCapturePage = () => {
             <button type="submit" className="primary" disabled={submitting}>
               {submitting ? "Saving details..." : "Save details"}
             </button>
-
-            <p className="muted-text">
-              Started {new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-              {" "}
-              This link expires at {new Date(session.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.
-            </p>
           </form>
         ) : null}
       </section>

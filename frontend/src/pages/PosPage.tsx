@@ -485,6 +485,7 @@ export const PosPage = () => {
     captureCompletionSummary,
     captureSession,
     captureSessionLoading,
+    captureSessionLaunchMode,
     captureStatusError,
     captureUrl,
     creatingCaptureSession,
@@ -1851,6 +1852,7 @@ export const PosPage = () => {
                 actionsDisabled={loading || completing}
                 captureSession={captureSession}
                 captureSessionLoading={captureSessionLoading}
+                captureSessionLaunchMode={captureSessionLaunchMode}
                 creatingCaptureSession={creatingCaptureSession}
                 captureStatusError={captureStatusError}
                 captureUrl={captureUrl}

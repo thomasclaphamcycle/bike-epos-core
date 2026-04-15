@@ -54,6 +54,7 @@ export const usePosCustomerCapture = ({
   const [creatingCaptureSession, setCreatingCaptureSession] = useState(false);
   const [captureStatusError, setCaptureStatusError] = useState<string | null>(null);
   const [captureCompletionSummary, setCaptureCompletionSummary] = useState<CaptureCompletionSummary | null>(null);
+  const [captureSessionLaunchMode, setCaptureSessionLaunchMode] = useState<"fresh" | "replaced" | null>(null);
 
   const captureUrl = useMemo(() => {
     if (!captureSession) {
@@ -144,6 +145,7 @@ export const usePosCustomerCapture = ({
     if (refreshedCustomer?.id) {
       setCaptureSession(null);
       setCaptureStatusError(null);
+      setCaptureSessionLaunchMode(null);
       if (options?.completionSummary) {
         setCaptureCompletionSummary(options.completionSummary);
       }
@@ -190,12 +192,13 @@ export const usePosCustomerCapture = ({
         return;
       }
       setCaptureSession(payload.session);
+      setCaptureSessionLaunchMode(payload.replacedActiveSessionCount > 0 ? "replaced" : "fresh");
       setCaptureCompletionSummary(null);
       announcedCaptureCompletionRef.current = null;
       success(
         payload.replacedActiveSessionCount > 0
-          ? "New customer capture link ready. The previous link has been replaced."
-          : "Customer capture link ready.",
+          ? "New tap request ready. The previous customer link will no longer work."
+          : "Tap request ready. Ask the customer to tap their phone now.",
       );
     } catch (captureError) {
       if (!mountedRef.current || !isSameTarget(target, targetRef.current)) {
@@ -251,6 +254,7 @@ export const usePosCustomerCapture = ({
     setCaptureSession(null);
     setCaptureStatusError(null);
     setCaptureSessionLoading(false);
+    setCaptureSessionLaunchMode(null);
     announcedCaptureCompletionRef.current = null;
     if (
       captureCompletionSummary
@@ -269,6 +273,7 @@ export const usePosCustomerCapture = ({
       setCaptureSession(null);
       setCaptureStatusError(null);
       setCaptureSessionLoading(false);
+      setCaptureSessionLaunchMode(null);
       announcedCaptureCompletionRef.current = null;
       return;
     }
@@ -319,6 +324,7 @@ export const usePosCustomerCapture = ({
     captureCompletionSummary,
     captureSession,
     captureSessionLoading,
+    captureSessionLaunchMode,
     captureStatusError,
     captureUrl,
     creatingCaptureSession,
