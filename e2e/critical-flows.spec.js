@@ -847,10 +847,7 @@ test("POS customer capture is actionable on a fresh basket before any products a
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
 
   await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
-  await expect(page.getByTestId("pos-customer-capture-ready-title")).toHaveText("Ready for customer capture");
-  await expect(page.getByTestId("pos-customer-capture-ready-helper")).toHaveText(
-    "Start a tap request when the customer is ready.",
-  );
+  await expect(page.getByTestId("pos-customer-capture-ready-title")).toHaveText("Ready");
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
 });
 
@@ -882,8 +879,10 @@ test("POS customer capture reloads the correct active session after switching sa
   await expect(page.getByTestId("pos-customer-capture-url")).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/pos?saleId=${encodeURIComponent(saleId)}`);
+  await expect(page.getByTestId("pos-customer-capture-live-state")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-refresh")).toBeVisible();
   await expect(await expandPosCustomerCaptureFallback(page)).toHaveValue(captureUrl);
-  await expect(page.getByText("Waiting for customer")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-time-left")).toBeVisible();
 });
 
 test("POS customer capture shows matched-by-email outcome for existing customers", async ({
