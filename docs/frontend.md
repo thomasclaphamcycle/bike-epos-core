@@ -10,6 +10,7 @@ npm --prefix frontend run dev
 Backend should be running on `http://localhost:3100`.
 If you need a different local backend origin, set `VITE_API_PROXY_TARGET` before starting the frontend dev server so API proxying and backend print/receipt links stay aligned.
 For local customer-capture testing, do not point `VITE_PUBLIC_APP_ORIGIN` at production. Leave it unset to use the local frontend origin, or set it to an explicitly reachable dev/tunnel host only for phone testing.
+For the full phone/NFC customer-capture tunnel setup, use [docs/dev-tunnel-customer-capture.md](/Users/thomaswitherspoon/Development/bike-epos-core/docs/dev-tunnel-customer-capture.md).
 
 ## POS (M76)
 
