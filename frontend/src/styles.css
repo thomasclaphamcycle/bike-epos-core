@@ -14398,6 +14398,8 @@ body.rota-row-drag-copy-active {
 
 .pos-customer-capture-panel {
   margin-top: 8px;
+  padding: 8px 10px;
+  gap: 8px;
 }
 
 .pos-customer-capture-panel .card-header-row {
@@ -14405,9 +14407,41 @@ body.rota-row-drag-copy-active {
   gap: 10px;
 }
 
+.pos-customer-capture-header {
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-customer-capture-header-copy,
+.pos-customer-capture-state-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pos-customer-capture-header-copy {
+  flex: 1 1 auto;
+}
+
+.pos-customer-capture-header .primary,
+.pos-customer-capture-live-header button {
+  min-height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.pos-customer-capture-header-note,
+.pos-customer-capture-summary-note,
+.pos-customer-capture-contact,
+.pos-customer-capture-state-copy p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .pos-customer-capture-eyebrow {
-  margin: 4px 0 6px;
-  font-size: 0.75rem;
+  margin: 1px 0 0;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -14427,46 +14461,58 @@ body.rota-row-drag-copy-active {
   margin-top: 0;
 }
 
+.pos-customer-capture-state-compact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+}
+
 .pos-customer-capture-panel .success-panel,
 .pos-customer-capture-panel .quick-create-panel,
 .pos-customer-capture-panel .cash-qr-card {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .pos-customer-capture-live {
+  padding: 9px 10px;
   border: 1px solid rgba(140, 168, 194, 0.56);
   background: linear-gradient(180deg, rgba(246, 250, 254, 0.98) 0%, rgba(231, 239, 248, 0.98) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .pos-customer-capture-live-header {
-  gap: 12px;
+  align-items: start;
+  gap: 8px;
 }
 
 .pos-customer-capture-live-title {
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
 .pos-customer-capture-live-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0;
+  gap: 6px;
+  margin: 8px 0;
 }
 
 .pos-customer-capture-live-meta > div {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 7px 8px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(128, 160, 188, 0.22);
 }
 
 .pos-customer-capture-replaced-note {
   display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   border: 1px solid rgba(220, 184, 126, 0.7);
   background: rgba(255, 245, 226, 0.96);
 }
@@ -14477,15 +14523,15 @@ body.rota-row-drag-copy-active {
 
 .pos-customer-capture-fallback {
   border-top: 1px solid rgba(49, 93, 130, 0.12);
-  padding-top: 12px;
+  padding-top: 8px;
 }
 
 .pos-customer-capture-fallback-heading {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .pos-customer-capture-fallback-heading p {
-  margin: 4px 0 0;
+  margin: 0;
 }
 
 .pos-customer-capture-summary-heading {
@@ -14508,15 +14554,51 @@ body.rota-row-drag-copy-active {
   text-decoration: underline;
 }
 
+.pos-customer-capture-summary-card {
+  padding: 10px 12px;
+}
+
 .pos-customer-capture-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 14px;
 }
 
+.pos-customer-capture-summary-grid-compact {
+  gap: 6px 10px;
+}
+
 .pos-customer-capture-summary-grid .table-primary,
 .pos-customer-capture-summary-grid .muted-text {
   word-break: break-word;
+}
+
+.pos-customer-capture-details {
+  display: grid;
+  gap: 8px;
+}
+
+.pos-customer-capture-details-summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #254f71;
+}
+
+.pos-customer-capture-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pos-customer-capture-details-summary::before {
+  content: "+";
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 800;
+}
+
+.pos-customer-capture-details[open] .pos-customer-capture-details-summary::before {
+  content: "−";
 }
 
 .pos-side-column .customer-search-panel > button {
