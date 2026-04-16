@@ -16,7 +16,8 @@ jobs:
     env:
       COREPOS_REPO_PATH: C:\CorePOS
       COREPOS_DEPLOY_ENTRYPOINT: C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd
-      COREPOS_DEPLOY_BASE_URL: http://127.0.0.1:3000
+      COREPOS_DEPLOY_BASE_URL: http://127.0.0.1:3100
+      COREPOS_PM2_CMD_PATH: C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd
       COREPOS_DEPLOY_HEALTH_RETRIES: "45"
       COREPOS_DEPLOY_HEALTH_INTERVAL_MS: "2000"
       COREPOS_DEPLOY_REQUEST_TIMEOUT_MS: "5000"
@@ -56,18 +57,21 @@ jobs:
           git -C $repoPath status --short --branch
           git -C $repoPath log --oneline -5
 
-          if (Get-Command pm2 -ErrorAction SilentlyContinue) {
+          $pm2Cmd = $env:COREPOS_PM2_CMD_PATH
+          if ($pm2Cmd -and (Test-Path $pm2Cmd)) {
             Write-Host ""
             Write-Host "PM2 process list:"
-            pm2 list
-            Write-Host ""
-            Write-Host "PM2 describe corepos:"
-            pm2 describe corepos
-            Write-Host ""
-            Write-Host "PM2 logs corepos (last 120 lines):"
-            pm2 logs corepos --lines 120 --nostream
+            & $pm2Cmd list
+            foreach ($processName in @("corepos-backend", "corepos-frontend", "cloudflared")) {
+              Write-Host ""
+              Write-Host "PM2 describe $processName:"
+              & $pm2Cmd describe $processName
+              Write-Host ""
+              Write-Host "PM2 logs $processName (last 120 lines):"
+              & $pm2Cmd logs $processName --lines 120 --nostream
+            }
           } else {
-            Write-Warning "pm2 is not available on PATH for deploy diagnostics."
+            Write-Warning "PM2 diagnostics unavailable because COREPOS_PM2_CMD_PATH was not found."
           }
 
           foreach ($path in @("/health?details=1", "/api/system/version", "/login")) {

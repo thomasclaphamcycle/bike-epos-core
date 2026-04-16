@@ -11,7 +11,7 @@ const CURRENT_RELEASE_FILENAME = "current-release.json";
 const LAST_RESULT_FILENAME = "last-release-result.json";
 const LAST_SUMMARY_FILENAME = "last-release-summary.md";
 const LAST_BACKUP_FILENAME = "last-backup.json";
-const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
+const DEFAULT_BASE_URL = "http://127.0.0.1:3100";
 const ROLLBACK_WORKFLOW_NAME = "Rollback CorePOS Production";
 const HEALTHCHECK_SCRIPT_PATH = path.join(__dirname, "deploy_health_check.js");
 const PACKAGE_JSON_PATH = "package.json";
@@ -29,7 +29,8 @@ Required environment:
 
 Optional:
   COREPOS_RELEASE_SKIP_ENTRYPOINT=1     Skip the external entrypoint (for dry-run validation only)
-  COREPOS_DEPLOY_BASE_URL               Base URL for production health probes (default http://127.0.0.1:3000)
+  COREPOS_DEPLOY_BASE_URL               Base URL for production health probes (default http://127.0.0.1:3100)
+  COREPOS_PM2_CMD_PATH                  Explicit PM2 command path for Windows production diagnostics
   COREPOS_RELEASE_STATE_DIR             Override the durable release-state folder
   COREPOS_ROLLBACK_WORKFLOW_NAME        Override the workflow name shown in summaries
 `);
@@ -81,7 +82,15 @@ const parseArgs = (argv) => {
 
 const normalizeBaseUrl = (value) => value.replace(/\/+$/, "");
 
-const DEFAULT_PM2_PROCESS_NAMES = ["corepos", "corepos-backend"];
+const DEFAULT_PM2_PROCESS_NAMES = ["corepos-backend"];
+
+const resolvePm2Command = () => {
+  const configuredPath = process.env.COREPOS_PM2_CMD_PATH?.trim();
+  if (configuredPath) {
+    return configuredPath;
+  }
+  return "pm2";
+};
 
 const resolvePm2ProcessNames = () => {
   const raw = process.env.COREPOS_PM2_PROCESS_NAMES;
@@ -434,7 +443,7 @@ const ensureRecentBackup = (config) => {
 
 const probePm2Status = () => {
   const processNames = resolvePm2ProcessNames();
-  const result = runCommand("pm2", ["jlist"], {
+  const result = runCommand(resolvePm2Command(), ["jlist"], {
     capture: true,
     allowFailure: true,
   });

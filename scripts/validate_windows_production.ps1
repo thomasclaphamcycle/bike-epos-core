@@ -3,8 +3,8 @@ param(
   [string]$RepoPath = "C:\CorePOS",
   [string]$EntrypointPath = "C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd",
   [string]$ReleaseStateDir = "C:\CorePOS\.corepos-runtime",
-  [string]$BaseUrl = "http://127.0.0.1:3000",
-  [string]$Pm2ProcessName = "corepos-backend",
+  [string]$BaseUrl = "http://127.0.0.1:3100",
+  [string[]]$Pm2ProcessNames = @("corepos-backend", "corepos-frontend", "cloudflared"),
   [string]$HealthTaskName = "CorePOS Health Monitor"
 )
 
@@ -140,17 +140,19 @@ $pm2Path = "C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd"
 
 if (Test-Path $pm2Path) {
   try {
-    $pm2Describe = & $pm2Path describe $Pm2ProcessName
-    if ($LASTEXITCODE -ne 0) {
-      throw "pm2 describe failed for $Pm2ProcessName"
-    }
+    foreach ($pm2ProcessName in $Pm2ProcessNames) {
+      $pm2Describe = & $pm2Path describe $pm2ProcessName
+      if ($LASTEXITCODE -ne 0) {
+        throw "pm2 describe failed for $pm2ProcessName"
+      }
 
-    $pm2DescribeText = ($pm2Describe | Out-String)
+      $pm2DescribeText = ($pm2Describe | Out-String)
 
-    if ($pm2DescribeText -match "\bonline\b") {
-      Add-Result "PASS" "process" "PM2 process" "'$Pm2ProcessName' is online"
-    } else {
-      Add-Result "WARN" "process" "PM2 process" "Could not confirm online status for '$Pm2ProcessName'"
+      if ($pm2DescribeText -match "\bonline\b") {
+        Add-Result "PASS" "process" "PM2 process" "'$pm2ProcessName' is online"
+      } else {
+        Add-Result "WARN" "process" "PM2 process" "Could not confirm online status for '$pm2ProcessName'"
+      }
     }
 
     Add-Result "WARN" "process" "PM2 env DATABASE_URL" "not inspected by describe-mode validator"
