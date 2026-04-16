@@ -131,9 +131,8 @@ const getBackendAssetOrigin = () => {
   if (configuredProxyTarget) {
     return configuredProxyTarget.replace(/\/$/, "");
   }
-  if (import.meta.env.DEV && typeof window !== "undefined") {
-    const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:3000`;
+  if (import.meta.env.DEV) {
+    return "http://localhost:3100";
   }
   return window.location.origin;
 };
