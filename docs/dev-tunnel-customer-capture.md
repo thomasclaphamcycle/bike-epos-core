@@ -27,6 +27,37 @@ Why this is needed:
 - production:
   - never use the production capture host for local dev-generated capture links
 
+## One-Command Workflow
+
+Preferred commands:
+
+```bash
+npm run dev:tunnel
+```
+
+This command will:
+
+- stop and restart the normal local inspection servers cleanly
+- start a Cloudflare Quick Tunnel to `http://localhost:3100`
+- capture the new `trycloudflare.com` URL
+- write `frontend/.env.local` with the correct local API target and tunnel origin
+- rebuild the frontend bundle
+- restart local CorePOS so the backend serves the rebuilt bundle
+- print the final tunnel URL and a reminder to generate a fresh tap request
+
+When you are done phone testing, reset back to normal local mode with:
+
+```bash
+npm run dev:tunnel:reset
+```
+
+That command:
+
+- stops the tracked Cloudflare tunnel
+- clears `VITE_PUBLIC_APP_ORIGIN` from `frontend/.env.local`
+- rebuilds the frontend bundle
+- restarts the normal local inspection servers
+
 ## Local Config
 
 Backend:
@@ -47,8 +78,11 @@ Notes:
 - `frontend/.env.local` is local-only and gitignored
 - do not commit transient quick-tunnel URLs
 - when you are not actively testing on a phone, leave `VITE_PUBLIC_APP_ORIGIN` unset
+- `npm run dev:tunnel` and `npm run dev:tunnel:reset` manage these two variables for you
 
 ## Quick Tunnel Flow
+
+Manual flow if you are not using `npm run dev:tunnel`:
 
 1. Start CorePOS locally.
 2. Start a Cloudflare quick tunnel:
@@ -157,10 +191,11 @@ Cause:
 Fix:
 
 - temporarily move or rename `~/.cloudflared/config.yml`
+- or `~/.cloudflared/config.yaml`
 - rerun:
 
 ```bash
-cloudflared tunnel --url http://localhost:3100
+npm run dev:tunnel
 ```
 
 ### Backend is accidentally running on `3000` instead of `3100`
@@ -189,4 +224,3 @@ Fix:
 - go back to POS
 - refresh or create a new tap request
 - use the newest generated link only
-

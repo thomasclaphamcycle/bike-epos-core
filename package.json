@@ -1,6 +1,6 @@
 {
   "name": "bike-epos-core",
-  "version": "1.2.82",
+  "version": "1.2.83",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -14,6 +14,8 @@
     "dev:guard": "bash scripts/dev_codex_guard.sh",
     "dev:status": "node scripts/dev_status.js",
     "dev:reset": "node scripts/dev_reset.js",
+    "dev:tunnel": "bash scripts/dev_tunnel_local.sh",
+    "dev:tunnel:reset": "bash scripts/dev_tunnel_reset.sh",
     "prisma:generate": "npx prisma generate",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend",
