@@ -47,6 +47,9 @@ export const PosCustomerCapturePanel = ({
 }: PosCustomerCapturePanelProps) => {
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
+  const startedLabel = formatCaptureRelativeMinutes(captureSession?.createdAt) ?? "just now";
+  const timeLeftLabel =
+    formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "left" }) ?? "timing unavailable";
   const expiresAtLabel = captureSession?.expiresAt
     ? new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : null;
@@ -95,9 +98,8 @@ export const PosCustomerCapturePanel = ({
         <div className="card-header-row pos-customer-capture-header">
           <div className="pos-customer-capture-header-copy">
             <div className="table-primary">NFC Customer Capture</div>
-            <p className="pos-customer-capture-eyebrow">Tap first. Link fallback only when needed.</p>
             <p className="muted-text pos-customer-capture-header-note">
-              Start a tap request when the customer is ready at the till. CorePOS keeps the latest capture live for this {captureContextLabel}.
+              Tap first. Link fallback only when needed.
             </p>
           </div>
           {isCaptureEligible ? (
@@ -166,54 +168,50 @@ export const PosCustomerCapturePanel = ({
             <div className="card-header-row pos-customer-capture-live-header">
               <div className="pos-customer-capture-state-copy">
                 <span className="status-badge">Waiting for customer</span>
-                <div className="table-primary pos-customer-capture-live-title">Ask the customer to tap their phone now</div>
+                <div className="table-primary pos-customer-capture-live-title">Tap customer phone</div>
                 <p className="muted-text pos-customer-capture-header-note">
-                  Their phone should open the secure capture page for this {captureContextLabel}. Keep this screen open until the details come back.
+                  Phone should open the secure capture page for this {captureContextLabel}.
                 </p>
               </div>
-              <button type="button" onClick={onRefreshStatus}>
-                Refresh Status
-              </button>
             </div>
-            <div className="pos-customer-capture-live-meta">
-              <div>
-                <div className="muted-text">Started</div>
-                <div className="table-primary">
-                  {formatCaptureRelativeMinutes(captureSession.createdAt) ?? "just now"}
-                </div>
+            <div className="pos-customer-capture-live-meta-row">
+              <div className="pos-customer-capture-live-meta">
+                <span>
+                  <strong>Started:</strong> {startedLabel}
+                </span>
+                <span>
+                  <strong>Expires:</strong> {expiresAtLabel || "timing unavailable"}
+                </span>
+                <span>{timeLeftLabel}</span>
               </div>
-              <div>
-                <div className="muted-text">Expires</div>
-                <div className="table-primary">
-                  {expiresAtLabel || "Timing unavailable"}
-                </div>
-              </div>
-              <div>
-                <div className="muted-text">Time left</div>
-                <div className="table-primary">
-                  {formatCaptureRelativeMinutes(captureSession.expiresAt, { suffix: "remaining" }) ?? "timing unavailable"}
-                </div>
-              </div>
+              <button
+                type="button"
+                className="secondary pos-customer-capture-refresh"
+                data-testid="pos-customer-capture-refresh"
+                onClick={onRefreshStatus}
+              >
+                Refresh
+              </button>
             </div>
             {captureSessionLaunchMode === "replaced" ? (
               <div className="pos-customer-capture-replaced-note">
                 <span className="status-badge status-warning">Replaced</span>
                 <div className="pos-customer-capture-state-copy">
                   <p className="muted-text">
-                    This new tap request replaced an older one. Only the newest customer link will work now.
+                    New tap requests expire this link.
                   </p>
                 </div>
               </div>
             ) : null}
             <details className="cash-qr-copy pos-customer-capture-fallback pos-customer-capture-details" open>
               <summary className="pos-customer-capture-details-summary">
-                Link fallback and open page
+                Fallback link
               </summary>
               <div className="pos-customer-capture-fallback-heading">
-                <p className="muted-text">Use this only if the customer&apos;s tap does not open the page.</p>
+                <p className="muted-text">Use only if tap does not open the page.</p>
               </div>
               <label>
-                Fallback capture URL
+                Capture URL
                 <input
                   data-testid="pos-customer-capture-url"
                   value={captureUrl}
@@ -222,15 +220,12 @@ export const PosCustomerCapturePanel = ({
               </label>
               <div className="actions-inline">
                 <button type="button" onClick={onCopyCaptureUrl}>
-                  Copy Fallback Link
+                  Copy link
                 </button>
                 <a href={captureUrl} target="_blank" rel="noreferrer">
-                  Open Link
+                  Open
                 </a>
               </div>
-              <p className="muted-text">
-                Starting another tap request expires this one immediately.
-              </p>
             </details>
           </div>
         ) : captureSession?.status === "COMPLETED" ? (
@@ -268,9 +263,9 @@ export const PosCustomerCapturePanel = ({
           <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact" data-testid="pos-customer-capture-ready-state">
             <span className="status-badge status-complete">Ready</span>
             <div className="pos-customer-capture-state-copy">
-              <strong>Ready for customer capture</strong>
-              <p className="muted-text">
-                No live capture link yet. Start a tap request when the customer is ready, and keep the link fallback for phones that need it.
+              <strong data-testid="pos-customer-capture-ready-title">Ready for customer capture</strong>
+              <p className="muted-text" data-testid="pos-customer-capture-ready-helper">
+                Start a tap request when the customer is ready.
               </p>
             </div>
           </div>

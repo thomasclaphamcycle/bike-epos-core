@@ -750,7 +750,7 @@ test("POS customer capture regeneration makes older public links fail clearly", 
     {},
   );
 
-  await page.getByRole("button", { name: "Refresh Status" }).click();
+  await page.getByTestId("pos-customer-capture-refresh").click();
   const captureUrlInput = page.getByTestId("pos-customer-capture-url");
   await expect.poll(async () => captureUrlInput.inputValue()).not.toBe(firstCaptureUrl);
   const secondCaptureUrl = await captureUrlInput.inputValue();
@@ -836,9 +836,10 @@ test("POS customer capture is actionable on a fresh basket before any products a
   await page.context().clearCookies();
   await loginViaUi(page, credentials, "/pos", { surface: "frontend" });
 
-  await expect(page.getByTestId("pos-customer-capture-ready-state")).toContainText("No live capture link");
-  await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(
-    "Start a tap request when the customer is ready at the till.",
+  await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
+  await expect(page.getByTestId("pos-customer-capture-ready-title")).toHaveText("Ready for customer capture");
+  await expect(page.getByTestId("pos-customer-capture-ready-helper")).toHaveText(
+    "Start a tap request when the customer is ready.",
   );
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
 });

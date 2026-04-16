@@ -301,6 +301,19 @@ const getCurrentCaptureStationEntry = async (stationSlug = CAPTURE_STATION_SLUG)
   });
 };
 
+const clearActiveCaptureSessionsForStation = async (stationKey) => {
+  await prisma.saleCustomerCaptureSession.updateMany({
+    where: {
+      stationKey,
+      status: "ACTIVE",
+    },
+    data: {
+      status: "EXPIRED",
+      expiresAt: new Date(Date.now() - 60_000),
+    },
+  });
+};
+
 const run = async () => {
   const created = {
     locationIds: new Set(),
@@ -315,6 +328,7 @@ const run = async () => {
 
   try {
     await serverController.startIfNeeded();
+    await clearActiveCaptureSessionsForStation(CAPTURE_STATION_KEY);
 
     const token = uniqueRef();
     const location = await prisma.location.create({
