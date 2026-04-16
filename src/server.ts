@@ -305,7 +305,7 @@ app.use("/", receiptUiRouter);
 app.use("/", tillUiRouter);
 app.use(errorHandler);
 
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 3100);
 const shutdownTimeoutMs = Number(process.env.SERVER_SHUTDOWN_TIMEOUT_MS || 5000);
 let httpServer: HttpServer | null = null;
 let shutdownPromise: Promise<void> | null = null;

@@ -76,7 +76,7 @@ const resolvePublicAppUrl = (path: string) => {
   const baseUrl =
     normalizeOptionalText(process.env.PUBLIC_APP_URL)
     ?? normalizeOptionalText(process.env.APP_BASE_URL)
-    ?? `http://localhost:${normalizeOptionalText(process.env.PORT) ?? "3000"}`;
+    ?? `http://localhost:${normalizeOptionalText(process.env.PORT) ?? "3100"}`;
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
