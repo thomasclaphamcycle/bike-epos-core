@@ -2,7 +2,7 @@
 
 const { setTimeout: sleep } = require("node:timers/promises");
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
+const DEFAULT_BASE_URL = "http://127.0.0.1:3100";
 
 const parsePositiveInteger = (name, fallback) => {
   const raw = process.env[name];

@@ -16,7 +16,7 @@ Restart configuration (choose one):
   COREPOS_SYSTEMD_SERVICE    systemd service name to restart via systemctl
 
 Optional:
-  COREPOS_HEALTHCHECK_URL    URL to poll after restart (for example http://127.0.0.1:3000/health)
+  COREPOS_HEALTHCHECK_URL    URL to poll after restart (for example http://127.0.0.1:3100/health)
 EOF
 }
 

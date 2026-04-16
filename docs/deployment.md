@@ -9,7 +9,7 @@ Backend:
 - `DATABASE_URL` (PostgreSQL connection string)
 - `AUTH_JWT_SECRET`
 - `COOKIE_SECRET`
-- `PORT` (default `3000`)
+- `PORT` (default `3100`)
 - `NODE_ENV` (`development`, `test`, or `production`)
 - `OPS_LOGGING=1` (optional, enables concise structured operational logs for auth, workshop, purchasing, and inventory lifecycle events)
 - `COREPOS_DEBUG=1` (optional, adds concise request, error, and startup diagnostics for support/debug sessions)
@@ -232,7 +232,7 @@ Rollback notes:
 For manual validation from the production checkout, the same repo-native health probe can be run directly:
 
 ```bash
-COREPOS_DEPLOY_BASE_URL=http://127.0.0.1:3000 \
+COREPOS_DEPLOY_BASE_URL=http://127.0.0.1:3100 \
 node scripts/deploy_health_check.js
 ```
 
@@ -246,7 +246,7 @@ npm run health:check
 
 Behavior:
 
-- requests `http://127.0.0.1:3000/health?details=1`
+- requests `http://127.0.0.1:3100/health?details=1`
 - times out after about 3 seconds
 - stores the last known state in `C:\CorePOS\.corepos-runtime\health-state.json`
 - exits silently when the app stays healthy

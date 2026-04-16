@@ -147,13 +147,13 @@ Recommended release procedure:
 2. confirm the new release includes committed Prisma migrations if schema changed
 3. make sure the production checkout is clean with no local edits
 4. configure a safe restart command using either:
-   - `COREPOS_RESTART_CMD`, for example `COREPOS_RESTART_CMD="pm2 restart corepos"`
+   - `COREPOS_RESTART_CMD`, for example `COREPOS_RESTART_CMD="C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd restart corepos-backend"`
    - `COREPOS_SYSTEMD_SERVICE`, for example `COREPOS_SYSTEMD_SERVICE=corepos`
 5. run the repo helper:
 
 ```bash
 COREPOS_SYSTEMD_SERVICE=corepos \
-COREPOS_HEALTHCHECK_URL=http://127.0.0.1:3000/health \
+COREPOS_HEALTHCHECK_URL=http://127.0.0.1:3100/health \
 scripts/upgrade_corepos.sh
 ```
 
@@ -182,9 +182,9 @@ Windows self-hosted deploy and rollback now use the same repo-controlled release
    - `recovery_mode` only after restoring a verified database backup
 4. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
 5. verify:
-   - `http://127.0.0.1:3000/health?details=1`
-   - `http://127.0.0.1:3000/api/system/version`
-   - `http://127.0.0.1:3000/login`
+   - `http://127.0.0.1:3100/health?details=1`
+   - `http://127.0.0.1:3100/api/system/version`
+   - `http://127.0.0.1:3100/login`
 6. confirm the running revision matches the selected rollback target during rollback
 7. only after the health checks pass, record the release as known-good
 8. if deploy or rollback fails, the workflow surfaces:
@@ -208,12 +208,15 @@ For the target Windows 11 local-server setup, the repo currently assumes this se
 - the runtime checkout lives at `C:\CorePOS`
 - the durable release-state folder lives at `C:\CorePOS\.corepos-runtime`
 - the external handoff script exists at `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-- that handoff script performs the install/build/migrate/restart work needed to leave the app healthy again on `http://127.0.0.1:3000`
-- PM2 manages the backend under the process name `corepos`
+- that handoff script performs the install/build/migrate/restart work needed to leave the app healthy again on `http://127.0.0.1:3100`
+- PM2 should be invoked via `C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd` when PATH resolution is not reliable
+- PM2 should show the runtime processes `corepos-backend`, `corepos-frontend`, and `cloudflared`
 - the self-hosted GitHub Actions runner runs on the same machine and can reach:
   - `C:\CorePOS`
   - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-  - `http://127.0.0.1:3000`
+  - `http://127.0.0.1:3100`
+
+The repo-tracked reference script is [scripts/windows/deploy-corepos.cmd](/Users/thomaswitherspoon/Development/bike-epos-core/scripts/windows/deploy-corepos.cmd). If the live copy at `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd` still contains `VITE_API_PROXY_TARGET=http://localhost:3000`, update that server copy manually to `http://localhost:3100` as well.
 
 If you are fronting the server with Cloudflare Tunnel, set `PUBLIC_APP_URL` to the exact customer-facing hostname carried by that tunnel so workshop/public links match the externally reachable URL.
 
