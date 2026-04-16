@@ -24,6 +24,17 @@ const toLocalFrontendUrl = (publicUrl) => {
   return new URL(`${parsed.pathname}${parsed.search}`, frontendBaseUrl).toString();
 };
 
+const expandPosCustomerCaptureFallback = async (page) => {
+  const captureUrl = page.getByTestId("pos-customer-capture-url");
+  if (await captureUrl.count()) {
+    return captureUrl;
+  }
+
+  await page.getByTestId("pos-customer-capture-fallback").getByText("Fallback").click();
+  await expect(captureUrl).toBeVisible();
+  return captureUrl;
+};
+
 const collectPosAddTwoDiagnostics = async (page, variantId) => page.evaluate((buttonTestId) => {
   const serializeElement = (selector) => {
     const element = document.querySelector(selector);
@@ -653,8 +664,7 @@ test("POS customer capture works before checkout and carries the customer into t
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
 
   await page.getByTestId("pos-customer-capture-generate").click();
-  const captureUrlInput = page.getByTestId("pos-customer-capture-url");
-  await expect(captureUrlInput).toBeVisible();
+  const captureUrlInput = await expandPosCustomerCaptureFallback(page);
   const captureUrl = await captureUrlInput.inputValue();
   expect(captureUrl).toContain("/customer-capture");
 
@@ -737,7 +747,7 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.getByTestId("pos-customer-capture-generate").click();
 
-  const firstCaptureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const firstCaptureUrl = await (await expandPosCustomerCaptureFallback(page)).inputValue();
   await expect(firstCaptureUrl).toContain("/customer-capture");
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
@@ -751,7 +761,7 @@ test("POS customer capture regeneration makes older public links fail clearly", 
   );
 
   await page.getByTestId("pos-customer-capture-refresh").click();
-  const captureUrlInput = page.getByTestId("pos-customer-capture-url");
+  const captureUrlInput = await expandPosCustomerCaptureFallback(page);
   await expect.poll(async () => captureUrlInput.inputValue()).not.toBe(firstCaptureUrl);
   const secondCaptureUrl = await captureUrlInput.inputValue();
   expect(secondCaptureUrl).toContain("/customer-capture");
@@ -784,7 +794,7 @@ test("POS customer capture panel resets to ready after removing a captured baske
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.getByTestId("pos-customer-capture-generate").click();
 
-  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const captureUrl = await (await expandPosCustomerCaptureFallback(page)).inputValue();
   await expect(captureUrl).toContain("/customer-capture");
 
   const capturePage = await context.newPage();
@@ -821,7 +831,7 @@ test("POS customer capture panel resets to ready after removing a captured baske
 
   await page.getByTestId("pos-customer-capture-generate").click();
   await expect(page.getByTestId("pos-customer-capture-live-state")).toBeVisible();
-  await expect(page.getByTestId("pos-customer-capture-url")).toHaveValue(/customer-capture\?token=/);
+  await expect(await expandPosCustomerCaptureFallback(page)).toHaveValue(/customer-capture\?token=/);
 });
 
 test("POS customer capture is actionable on a fresh basket before any products are added", async ({
@@ -864,7 +874,7 @@ test("POS customer capture reloads the correct active session after switching sa
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.getByTestId("pos-customer-capture-generate").click();
 
-  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const captureUrl = await (await expandPosCustomerCaptureFallback(page)).inputValue();
   const saleId = new URL(page.url()).searchParams.get("saleId");
   expect(saleId).toBeTruthy();
 
@@ -872,7 +882,7 @@ test("POS customer capture reloads the correct active session after switching sa
   await expect(page.getByTestId("pos-customer-capture-url")).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/pos?saleId=${encodeURIComponent(saleId)}`);
-  await expect(page.getByTestId("pos-customer-capture-url")).toHaveValue(captureUrl);
+  await expect(await expandPosCustomerCaptureFallback(page)).toHaveValue(captureUrl);
   await expect(page.getByText("Waiting for customer")).toBeVisible();
 });
 
@@ -906,7 +916,7 @@ test("POS customer capture shows matched-by-email outcome for existing customers
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.getByTestId("pos-customer-capture-generate").click();
 
-  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const captureUrl = await (await expandPosCustomerCaptureFallback(page)).inputValue();
   const capturePage = await context.newPage();
   await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();
@@ -959,7 +969,7 @@ test("POS customer capture shows matched-by-phone outcome for existing customers
   await expect(page.getByTestId("pos-customer-capture-generate")).toBeEnabled();
   await page.getByTestId("pos-customer-capture-generate").click();
 
-  const captureUrl = await page.getByTestId("pos-customer-capture-url").inputValue();
+  const captureUrl = await (await expandPosCustomerCaptureFallback(page)).inputValue();
   const capturePage = await context.newPage();
   await capturePage.goto(toLocalFrontendUrl(captureUrl));
   await expect(capturePage.getByTestId("customer-capture-form")).toBeVisible();

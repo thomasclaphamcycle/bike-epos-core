@@ -47,12 +47,8 @@ export const PosCustomerCapturePanel = ({
 }: PosCustomerCapturePanelProps) => {
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
-  const startedLabel = formatCaptureRelativeMinutes(captureSession?.createdAt) ?? "just now";
   const timeLeftLabel =
     formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "left" }) ?? "timing unavailable";
-  const expiresAtLabel = captureSession?.expiresAt
-    ? new Date(captureSession.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : null;
 
   return (
     <>
@@ -166,23 +162,9 @@ export const PosCustomerCapturePanel = ({
         ) : captureSession?.status === "ACTIVE" && captureUrl ? (
           <div className="cash-qr-card pos-customer-capture-live" data-testid="pos-customer-capture-live-state">
             <div className="card-header-row pos-customer-capture-live-header">
-              <div className="pos-customer-capture-state-copy">
+              <div className="pos-customer-capture-live-heading">
                 <span className="status-badge">Waiting for customer</span>
                 <div className="table-primary pos-customer-capture-live-title">Tap customer phone</div>
-                <p className="muted-text pos-customer-capture-header-note">
-                  Phone should open the secure capture page for this {captureContextLabel}.
-                </p>
-              </div>
-            </div>
-            <div className="pos-customer-capture-live-meta-row">
-              <div className="pos-customer-capture-live-meta">
-                <span>
-                  <strong>Started:</strong> {startedLabel}
-                </span>
-                <span>
-                  <strong>Expires:</strong> {expiresAtLabel || "timing unavailable"}
-                </span>
-                <span>{timeLeftLabel}</span>
               </div>
               <button
                 type="button"
@@ -193,34 +175,34 @@ export const PosCustomerCapturePanel = ({
                 Refresh
               </button>
             </div>
-            {captureSessionLaunchMode === "replaced" ? (
-              <div className="pos-customer-capture-replaced-note">
-                <span className="status-badge status-warning">Replaced</span>
-                <div className="pos-customer-capture-state-copy">
-                  <p className="muted-text">
-                    New tap requests expire this link.
-                  </p>
-                </div>
+            <div className="pos-customer-capture-live-meta-row">
+              <div className="pos-customer-capture-live-meta">
+                <span data-testid="pos-customer-capture-time-left">{timeLeftLabel}</span>
               </div>
-            ) : null}
-            <details className="cash-qr-copy pos-customer-capture-fallback pos-customer-capture-details" open>
+              {captureSessionLaunchMode === "replaced" ? (
+                <span className="muted-text pos-customer-capture-replaced-inline">
+                  Previous link expired.
+                </span>
+              ) : null}
+            </div>
+            <details
+              className="cash-qr-copy pos-customer-capture-fallback pos-customer-capture-details"
+              data-testid="pos-customer-capture-fallback"
+            >
               <summary className="pos-customer-capture-details-summary">
-                Fallback link
+                Fallback
               </summary>
-              <div className="pos-customer-capture-fallback-heading">
-                <p className="muted-text">Use only if tap does not open the page.</p>
-              </div>
-              <label>
-                Capture URL
+              <div className="pos-customer-capture-fallback-body">
                 <input
                   data-testid="pos-customer-capture-url"
+                  aria-label="Fallback capture URL"
                   value={captureUrl}
                   readOnly
                 />
-              </label>
-              <div className="actions-inline">
+              </div>
+              <div className="actions-inline pos-customer-capture-fallback-actions">
                 <button type="button" onClick={onCopyCaptureUrl}>
-                  Copy link
+                  Copy
                 </button>
                 <a href={captureUrl} target="_blank" rel="noreferrer">
                   Open
