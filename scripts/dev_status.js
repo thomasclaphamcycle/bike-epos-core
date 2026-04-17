@@ -15,6 +15,12 @@ const PID_FILES = {
   backend: path.join(DEV_STATE_DIR, "backend.pid"),
   frontend: path.join(DEV_STATE_DIR, "frontend.pid"),
 };
+
+const TUNNEL_FILES = {
+  pid: path.join(DEV_STATE_DIR, "tunnel.pid"),
+  url: path.join(DEV_STATE_DIR, "tunnel.url"),
+  log: path.join(DEV_STATE_DIR, "tunnel.log"),
+};
 const PORTS = [
   { name: "backend-dev", port: 3100, url: "http://localhost:3100/health" },
   { name: "playwright-frontend", port: 4173, url: "http://localhost:4173/login" },
@@ -37,6 +43,19 @@ const readPidFile = (filePath) => {
 
   const pid = Number.parseInt(raw, 10);
   return Number.isInteger(pid) && pid > 0 ? pid : null;
+};
+
+const isPidAlive = (pid) => {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const probeUrl = async (url) => {
@@ -83,6 +102,29 @@ const main = async () => {
         listeners.length > 0 ? listeners.join(",") : "none"
       } health=${health.ok ? health.status : `down (${health.status})`}`,
     );
+  }
+
+  const tunnelUrl = fs.existsSync(TUNNEL_FILES.url)
+    ? fs.readFileSync(TUNNEL_FILES.url, "utf8").trim()
+    : null;
+  const tunnelPid = readPidFile(TUNNEL_FILES.pid);
+  const tunnelAlive = isPidAlive(tunnelPid);
+
+  log("tunnel:");
+  if (tunnelUrl) {
+    log(`  url: ${tunnelUrl}`);
+  } else {
+    log("  url: inactive");
+  }
+
+  if (tunnelPid) {
+    log(`  pid: ${tunnelPid} (${tunnelAlive ? "alive" : "not running"})`);
+  } else {
+    log("  pid: unavailable");
+  }
+
+  if (fs.existsSync(TUNNEL_FILES.log)) {
+    log(`  log: ${TUNNEL_FILES.log}`);
   }
 
   for (const [component, filePath] of Object.entries(PID_FILES)) {
