@@ -14,6 +14,8 @@
     "dev:guard": "bash scripts/dev_codex_guard.sh",
     "dev:status": "node scripts/dev_status.js",
     "dev:reset": "node scripts/dev_reset.js",
+    "sync:check": "node scripts/check_sync.js",
+    "sync:check:windows": "powershell -ExecutionPolicy Bypass -File scripts/check_windows_sync.ps1",
     "e2e:bridge:start": "node scripts/playwright_bridge.js start",
     "e2e:bridge:stop": "node scripts/playwright_bridge.js stop",
     "e2e:bridge:status": "node scripts/playwright_bridge.js status",

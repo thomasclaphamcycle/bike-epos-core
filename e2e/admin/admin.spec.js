@@ -77,21 +77,32 @@ test("Manager can open till, record paid-in, and close with count", async ({ pag
     prefix: "till-manager",
   });
 
-  await loginViaUi(page, managerCredentials, "/till");
-
-  const existing = await apiJson(page.request, "GET", "/api/till/sessions/current");
+  const existing = await apiJsonWithHeaderBypass(request, "GET", "/api/till/sessions/current", "MANAGER");
   if (existing?.session?.id) {
-    await apiJson(page.request, "POST", `/api/till/sessions/${existing.session.id}/count`, {
-      data: {
-        countedCashPence: existing.totals?.expectedCashPence || 0,
-        notes: "playwright pre-close",
+    await apiJsonWithHeaderBypass(
+      request,
+      "POST",
+      `/api/till/sessions/${existing.session.id}/count`,
+      "MANAGER",
+      {
+        data: {
+          countedCashPence: existing.totals?.expectedCashPence || 0,
+          notes: "playwright pre-close",
+        },
       },
-    });
-    await apiJson(page.request, "POST", `/api/till/sessions/${existing.session.id}/close`, {
-      data: {},
-    });
-    await page.reload();
+    );
+    await apiJsonWithHeaderBypass(
+      request,
+      "POST",
+      `/api/till/sessions/${existing.session.id}/close`,
+      "MANAGER",
+      {
+        data: {},
+      },
+    );
   }
+
+  await loginViaUi(page, managerCredentials, "/till");
 
   await page.fill('[data-testid="till-open-float"]', "1000");
   await page.click('[data-testid="till-open-submit"]');

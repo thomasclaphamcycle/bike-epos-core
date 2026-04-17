@@ -236,6 +236,28 @@ COREPOS_DEPLOY_BASE_URL=http://127.0.0.1:3100 \
 node scripts/deploy_health_check.js
 ```
 
+To confirm that your Mac checkout, GitHub `main`, and the Windows runtime are all aligned on the same revision, run the sync checker from your Mac:
+
+```bash
+npm run sync:check -- --windows-ssh coreposadmin@shop-pc
+```
+
+That Mac-side command fetches `origin`, compares local `HEAD` to `origin/main`, then SSHes into the Windows host to compare the runtime checkout plus the live app revision from `/api/system/version` and health from `/health?details=1`.
+
+If the runtime is directly reachable from your Mac, you can probe it without SSH:
+
+```bash
+npm run sync:check -- --live-base-url https://corepos.example.com
+```
+
+For a direct check on the Windows host itself:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check_windows_sync.ps1
+```
+
+The SSH-driven Mac check assumes Windows OpenSSH Server is enabled on the host and reachable from your Mac.
+
 ## Health Monitoring Alerts
 
 CorePOS now includes a simple one-shot health monitor for production operators and scheduled checks:

@@ -31,5 +31,26 @@ module.exports = defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
+  projects: [
+    {
+      name: "parallel-core",
+      testIgnore: [
+        "**/admin/admin.spec.js",
+        "**/critical/critical-smoke.spec.js",
+        "**/pos/pos-checkout.spec.js",
+      ],
+    },
+    {
+      name: "register-serial",
+      testMatch: [
+        "**/admin/admin.spec.js",
+        "**/critical/critical-smoke.spec.js",
+        "**/pos/pos-checkout.spec.js",
+      ],
+      fullyParallel: false,
+      workers: 1,
+      dependencies: ["parallel-core"],
+    },
+  ],
   webServer: [backendWebServer, frontendWebServer],
 });
