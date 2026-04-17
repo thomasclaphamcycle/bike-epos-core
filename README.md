@@ -215,6 +215,37 @@ npm run dev:guard -- npm run verify
 
 `npm run verify` now always ends with a repo-scoped postflight check for verification leftovers, even if an earlier verify step fails, so the preferred recovery path after an interrupted local run is `npm run dev:reset` followed by `npm run dev:status`.
 
+### Repo Sync Check
+
+When you want to confirm that your Mac checkout, `origin/main`, and the deployed Windows runtime are all on the same revision, use the repo-native sync checker from your Mac:
+
+```bash
+npm run sync:check -- --windows-ssh coreposadmin@shop-pc
+```
+
+That command:
+
+- fetches `origin`
+- compares local `HEAD` to `origin/main`
+- SSHes into the Windows host
+- compares `C:\CorePOS` `HEAD` to `origin/main`
+- verifies the live app revision from `http://127.0.0.1:3100/api/system/version`
+- verifies `http://127.0.0.1:3100/health?details=1`
+
+If the runtime is directly reachable from your Mac, you can also probe it without SSH:
+
+```bash
+npm run sync:check -- --live-base-url https://corepos.example.com
+```
+
+SSH is usually the easiest option when the Windows app only listens on `127.0.0.1`. For a direct Windows-side check on the host itself, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check_windows_sync.ps1
+```
+
+The SSH path assumes Windows OpenSSH Server is enabled on the host and that your Mac can authenticate to it.
+
 6. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
 
 ```bash

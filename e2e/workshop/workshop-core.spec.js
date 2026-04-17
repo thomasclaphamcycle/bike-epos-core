@@ -453,6 +453,7 @@ test("Login then workshop add labour and checkout marks job as collected", async
   await page.fill("#labour-price", "5000");
   await page.click("#add-labour-btn");
   await expect(page.locator("#labour-status")).toContainText("Labour line added.");
+  await ensureOpenRegisterSession(request);
 
   const checkout = await apiJson(page.request, "POST", `/api/workshop/jobs/${jobId}/checkout`, {
     data: {
