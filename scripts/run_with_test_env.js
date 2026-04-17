@@ -2,6 +2,7 @@
 require("dotenv").config({ path: ".env.test" });
 
 const { applyTestEnvDefaults } = require("./test_env_defaults");
+const { applyPlaywrightBridgeEnv } = require("./playwright_bridge_support");
 const {
   cleanupNewManagedRepoProcesses,
   installSignalHandlers,
@@ -19,7 +20,7 @@ if (!command) {
   process.exit(1);
 }
 
-const env = applyTestEnvDefaults(process.env);
+const env = applyPlaywrightBridgeEnv(applyTestEnvDefaults(process.env));
 
 const log = (message) => {
   console.error(`[run_with_test_env] ${message}`);

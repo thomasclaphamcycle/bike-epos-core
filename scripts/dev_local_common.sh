@@ -71,6 +71,35 @@ pid_exists() {
   kill -0 "$pid" 2>/dev/null
 }
 
+component_probe_url() {
+  local component="$1"
+  local port="$2"
+
+  if [[ "$component" == "backend" ]]; then
+    printf 'http://localhost:%s/health\n' "$port"
+    return
+  fi
+
+  printf 'http://localhost:%s/login\n' "$port"
+}
+
+component_port_looks_like_corepos() {
+  local component="$1"
+  local port="$2"
+  local url response http_code
+
+  url="$(component_probe_url "$component" "$port")"
+
+  if [[ "$component" == "backend" ]]; then
+    response="$(curl --silent --show-error --max-time 2 "$url" 2>/dev/null || true)"
+    [[ "$response" == *'"status":"ok"'* ]]
+    return
+  fi
+
+  http_code="$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --max-time 2 "$url" 2>/dev/null || true)"
+  [[ "$http_code" == "200" ]]
+}
+
 pid_command() {
   local pid="$1"
   ps -p "$pid" -o command= 2>/dev/null || true
@@ -240,14 +269,21 @@ classify_component_listeners() {
   local component="$1"
   local port="$2"
   local pid
+  local port_matches_corepos=0
 
   CLASSIFIED_MATCHING_PIDS=()
   CLASSIFIED_CONFLICTING_PIDS=()
+
+  if component_port_looks_like_corepos "$component" "$port"; then
+    port_matches_corepos=1
+  fi
 
   while IFS= read -r pid; do
     [[ -n "$pid" ]] || continue
     if [[ "$component" == "backend" ]]; then
       if is_corepos_backend_pid "$pid"; then
+        CLASSIFIED_MATCHING_PIDS+=("$pid")
+      elif (( port_matches_corepos == 1 )); then
         CLASSIFIED_MATCHING_PIDS+=("$pid")
       else
         CLASSIFIED_CONFLICTING_PIDS+=("$pid")
@@ -256,6 +292,8 @@ classify_component_listeners() {
     fi
 
     if is_corepos_frontend_pid "$pid"; then
+      CLASSIFIED_MATCHING_PIDS+=("$pid")
+    elif (( port_matches_corepos == 1 )); then
       CLASSIFIED_MATCHING_PIDS+=("$pid")
     else
       CLASSIFIED_CONFLICTING_PIDS+=("$pid")
@@ -323,6 +361,11 @@ stop_component_processes() {
     [[ -n "$pid" ]] || continue
     process_pids+=("$pid")
   done < <(list_component_process_pids "$component")
+
+  for pid in "${CLASSIFIED_MATCHING_PIDS[@]}"; do
+    [[ -n "$pid" ]] || continue
+    process_pids+=("$pid")
+  done
 
   if [[ -n "$leader_pid" ]] && pid_exists "$leader_pid"; then
     process_pids=("$leader_pid" "${process_pids[@]}")

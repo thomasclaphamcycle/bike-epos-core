@@ -454,6 +454,40 @@ Run suite:
 npm run e2e
 ```
 
+If you are running E2E from Codex or another sandboxed environment that cannot launch a local browser process, start the Playwright browser bridge once from your normal terminal:
+
+```bash
+npm run e2e:bridge:start
+```
+
+Useful bridge commands:
+
+```bash
+npm run e2e:bridge:status
+npm run e2e:bridge:stop
+```
+
+To make the bridge start automatically on macOS login, install the LaunchAgent once from your normal terminal:
+
+```bash
+npm run e2e:bridge:launchagent:install
+```
+
+Remove it later with:
+
+```bash
+npm run e2e:bridge:launchagent:uninstall
+```
+
+Once the bridge is running, `npm run e2e` and `npm run verify` automatically reuse its saved `wsEndpoint` through `scripts/run_with_test_env.js`, so Codex no longer needs to launch Chromium itself.
+
+Notes:
+
+- start the bridge from a regular local shell, not from a sandboxed Codex run
+- the bridge state is stored in `tmp/playwright-bridge/state.json`
+- set `PLAYWRIGHT_BRIDGE_CHANNEL=chrome` before `npm run e2e:bridge:start` if you want to use the installed Chrome channel instead of bundled Chromium
+- set `PLAYWRIGHT_BRIDGE_CHANNEL=chrome` before `npm run e2e:bridge:launchagent:install` if you want the login-time LaunchAgent to use installed Chrome
+
 E2E covers:
 
 - login + POS critical paths
@@ -481,6 +515,7 @@ Notes:
 - keep shared test ports such as `3100` clear before starting
 - standalone smoke commands start their own local test-mode server on `http://localhost:3100`
 - run `npm run test:db:up` first if the dedicated test database is not already running
+- if Codex cannot launch Playwright browsers directly, start the browser bridge once and then use the normal `npm run verify`
 
 ## Dev Workflow
 

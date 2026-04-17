@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CustomerCaptureSession } from "./customerCapture";
 import {
   formatCaptureMatchOutcome,
@@ -28,6 +29,40 @@ type PosCustomerCapturePanelProps = {
   onRefreshTarget: () => void;
 };
 
+type CaptureVisualTone = "neutral" | "ready" | "waiting" | "success" | "danger";
+
+const STAGE_STEPS = [
+  { key: "ready", label: "Ready" },
+  { key: "waiting", label: "Waiting" },
+  { key: "success", label: "Linked" },
+] as const;
+
+const getStepState = (
+  stepKey: (typeof STAGE_STEPS)[number]["key"],
+  activeStep: (typeof STAGE_STEPS)[number]["key"],
+) => {
+  const stepIndex = STAGE_STEPS.findIndex((step) => step.key === stepKey);
+  const activeIndex = STAGE_STEPS.findIndex((step) => step.key === activeStep);
+
+  if (stepIndex < 0 || activeIndex < 0) {
+    return "pending";
+  }
+
+  if (stepIndex < activeIndex) {
+    return "complete";
+  }
+
+  if (stepIndex === activeIndex) {
+    if (stepKey === "success" && activeStep === "success") {
+      return "active-success";
+    }
+
+    return "active";
+  }
+
+  return "pending";
+};
+
 export const PosCustomerCapturePanel = ({
   target,
   isCaptureEligible,
@@ -49,6 +84,142 @@ export const PosCustomerCapturePanel = ({
   const targetCustomer = getCaptureTargetCustomer(target);
   const timeLeftLabel =
     formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "left" }) ?? "timing unavailable";
+  const liveSessionWaiting = captureSession?.status === "ACTIVE" && Boolean(captureUrl);
+
+  let stageTone: CaptureVisualTone = "ready";
+  let stageLabel = "Ready";
+  let stageTitle = "Ready";
+  let stageBody: ReactNode = (
+    <p className="muted-text pos-customer-capture-support">
+      Start a secure tap flow for this {captureContextLabel}.
+    </p>
+  );
+  let stageAction: ReactNode = null;
+  let stageTestId = "pos-customer-capture-ready-state";
+  let activeStep: (typeof STAGE_STEPS)[number]["key"] = "ready";
+
+  if (targetCustomer) {
+    stageTone = "success";
+    stageLabel = "Linked";
+    stageTitle = "Customer already attached";
+    stageBody = (
+      <>
+        <p className="muted-text pos-customer-capture-support">
+          This {captureContextLabel} already has a linked customer.
+        </p>
+        <p className="muted-text pos-customer-capture-contact">{formatCustomerContactSummary(targetCustomer)}</p>
+      </>
+    );
+    stageTestId = "pos-customer-capture-attached-state";
+    activeStep = "success";
+  } else if (target?.ownerType === "sale" && target.sale.completedAt) {
+    stageTone = "danger";
+    stageLabel = "Locked";
+    stageTitle = "Sale already completed";
+    stageBody = (
+      <p className="muted-text pos-customer-capture-support">
+        Customer capture is unavailable once the sale has been completed.
+      </p>
+    );
+    stageTestId = "pos-customer-capture-ineligible-state";
+  } else if (captureSessionLoading) {
+    stageTone = "waiting";
+    stageLabel = "Checking";
+    stageTitle = "Checking tap status";
+    stageBody = (
+      <p className="muted-text pos-customer-capture-support">
+        Refreshing live capture status.
+      </p>
+    );
+  } else if (captureStatusError && !captureSession) {
+    stageTone = "danger";
+    stageLabel = "Issue";
+    stageTitle = "Customer capture unavailable";
+    stageBody = <p className="muted-text pos-customer-capture-support">{captureStatusError}</p>;
+  } else if (liveSessionWaiting) {
+    stageTone = "waiting";
+    stageLabel = "Waiting";
+    stageTitle = "Tap customer phone";
+    stageBody = (
+      <>
+        <div className="pos-customer-capture-live-meta-row">
+          <div className="pos-customer-capture-live-meta">
+            <span data-testid="pos-customer-capture-time-left">{timeLeftLabel}</span>
+          </div>
+          {captureSessionLaunchMode === "replaced" ? (
+            <span className="muted-text pos-customer-capture-replaced-inline">
+              Previous link expired.
+            </span>
+          ) : null}
+        </div>
+        <details
+          className="cash-qr-copy pos-customer-capture-fallback pos-customer-capture-details"
+          data-testid="pos-customer-capture-fallback"
+        >
+          <summary className="pos-customer-capture-details-summary">
+            Fallback link
+          </summary>
+          <div className="pos-customer-capture-fallback-body">
+            <input
+              data-testid="pos-customer-capture-url"
+              aria-label="Fallback capture URL"
+              value={captureUrl ?? ""}
+              readOnly
+            />
+          </div>
+          <div className="actions-inline pos-customer-capture-fallback-actions">
+            <button type="button" onClick={onCopyCaptureUrl}>
+              Copy
+            </button>
+            <a href={captureUrl ?? undefined} target="_blank" rel="noreferrer">
+              Open
+            </a>
+          </div>
+        </details>
+      </>
+    );
+    stageAction = (
+      <button
+        type="button"
+        className="secondary pos-customer-capture-refresh"
+        data-testid="pos-customer-capture-refresh"
+        onClick={onRefreshStatus}
+      >
+        Refresh
+      </button>
+    );
+    stageTestId = "pos-customer-capture-live-state";
+    activeStep = "waiting";
+  } else if (captureSession?.status === "COMPLETED") {
+    stageTone = "success";
+    stageLabel = captureSession.outcome
+      ? getCaptureOutcomeLabel(captureSession.outcome.matchType)
+      : "Linked";
+    stageTitle = "Customer details received";
+    stageBody = captureSession.outcome ? (
+      <p className="muted-text pos-customer-capture-support">
+        {formatCaptureMatchOutcome(
+          captureSession.outcome.matchType,
+          captureSession.outcome.customer.name,
+        )}
+      </p>
+    ) : (
+      <p className="muted-text pos-customer-capture-support">
+        Ready to attach back to this {captureContextLabel}.
+      </p>
+    );
+    stageTestId = "pos-customer-capture-completed-state";
+    activeStep = "success";
+  } else if (captureSession?.status === "EXPIRED") {
+    stageTone = "danger";
+    stageLabel = "Expired";
+    stageTitle = "Tap request expired";
+    stageBody = (
+      <p className="muted-text pos-customer-capture-support">
+        Start a new tap request to continue.
+      </p>
+    );
+  }
 
   return (
     <>
@@ -94,6 +265,7 @@ export const PosCustomerCapturePanel = ({
         <div className="card-header-row pos-customer-capture-header">
           <div className="pos-customer-capture-header-copy">
             <div className="table-primary">Tap Customer</div>
+            <p className="pos-customer-capture-eyebrow">NFC capture flow</p>
           </div>
           {isCaptureEligible ? (
             captureSession?.status === "COMPLETED" && target ? (
@@ -120,123 +292,40 @@ export const PosCustomerCapturePanel = ({
         </div>
 
         <div className="pos-customer-capture-state-shell">
-          {targetCustomer ? (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact" data-testid="pos-customer-capture-attached-state">
-              <span className="status-badge status-complete">Attached</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong>Customer already attached</strong>
-                <p className="muted-text pos-customer-capture-contact">{formatCustomerContactSummary(targetCustomer)}</p>
-              </div>
-            </div>
-          ) : target?.ownerType === "sale" && target.sale.completedAt ? (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact" data-testid="pos-customer-capture-ineligible-state">
-              <span className="status-badge">Unavailable</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong>Sale already completed</strong>
-              </div>
-            </div>
-          ) : captureSessionLoading ? (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact">
-              <span className="status-badge">Loading</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong>Checking status</strong>
-              </div>
-            </div>
-          ) : captureStatusError && !captureSession ? (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact">
-              <span className="status-badge">Error</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong>Customer capture unavailable</strong>
-                <p className="muted-text">{captureStatusError}</p>
-              </div>
-            </div>
-          ) : captureSession?.status === "ACTIVE" && captureUrl ? (
-            <div className="cash-qr-card pos-customer-capture-live" data-testid="pos-customer-capture-live-state">
-              <div className="card-header-row pos-customer-capture-live-header">
-                <div className="pos-customer-capture-live-heading">
-                  <span className="status-badge">Waiting</span>
-                  <div className="table-primary pos-customer-capture-live-title">Tap customer phone</div>
-                </div>
-                <button
-                  type="button"
-                  className="secondary pos-customer-capture-refresh"
-                  data-testid="pos-customer-capture-refresh"
-                  onClick={onRefreshStatus}
+          <div
+            className={`pos-customer-capture-stage-card pos-customer-capture-stage-card-${stageTone}`}
+            data-testid={stageTestId}
+          >
+            <div className="pos-customer-capture-stage-rail" aria-hidden="true">
+              {STAGE_STEPS.map((step) => (
+                <div
+                  key={step.key}
+                  className={`pos-customer-capture-step pos-customer-capture-step-${getStepState(step.key, activeStep)}`}
                 >
-                  Refresh
-                </button>
-              </div>
-              <div className="pos-customer-capture-live-meta-row">
-                <div className="pos-customer-capture-live-meta">
-                  <span data-testid="pos-customer-capture-time-left">{timeLeftLabel}</span>
+                  <span className="pos-customer-capture-step-light" />
+                  <span className="pos-customer-capture-step-label">{step.label}</span>
                 </div>
-                {captureSessionLaunchMode === "replaced" ? (
-                  <span className="muted-text pos-customer-capture-replaced-inline">
-                    Previous link expired.
+              ))}
+            </div>
+
+            <div className="pos-customer-capture-stage-main">
+              <div className="pos-customer-capture-stage-header">
+                <div className="pos-customer-capture-stage-title-wrap">
+                  <span className={`status-badge pos-customer-capture-stage-badge pos-customer-capture-stage-badge-${stageTone}`}>
+                    {stageLabel}
                   </span>
-                ) : null}
-              </div>
-              <details
-                className="cash-qr-copy pos-customer-capture-fallback pos-customer-capture-details"
-                data-testid="pos-customer-capture-fallback"
-              >
-                <summary className="pos-customer-capture-details-summary">
-                  Fallback
-                </summary>
-                <div className="pos-customer-capture-fallback-body">
-                  <input
-                    data-testid="pos-customer-capture-url"
-                    aria-label="Fallback capture URL"
-                    value={captureUrl}
-                    readOnly
-                  />
+                  <strong data-testid={stageTestId === "pos-customer-capture-ready-state" ? "pos-customer-capture-ready-title" : undefined}>
+                    {stageTitle}
+                  </strong>
                 </div>
-                <div className="actions-inline pos-customer-capture-fallback-actions">
-                  <button type="button" onClick={onCopyCaptureUrl}>
-                    Copy
-                  </button>
-                  <a href={captureUrl} target="_blank" rel="noreferrer">
-                    Open
-                  </a>
-                </div>
-              </details>
-            </div>
-          ) : captureSession?.status === "COMPLETED" ? (
-            <div className="success-panel success-panel-sale pos-customer-capture-state pos-customer-capture-state-compact" data-testid="pos-customer-capture-completed-state">
-              <div className="success-panel-heading">
-                <div className="pos-customer-capture-state-copy">
-                  <strong>Customer details received</strong>
-                  {captureSession.outcome ? (
-                    <p className="muted-text">
-                      {formatCaptureMatchOutcome(
-                        captureSession.outcome.matchType,
-                        captureSession.outcome.customer.name,
-                      )}
-                    </p>
-                  ) : null}
-                </div>
-                <span className="status-badge status-complete">
-                  {captureSession.outcome
-                    ? getCaptureOutcomeLabel(captureSession.outcome.matchType)
-                    : "Ready to attach"}
-                </span>
+                {stageAction}
+              </div>
+
+              <div className="pos-customer-capture-stage-body">
+                {stageBody}
               </div>
             </div>
-          ) : captureSession?.status === "EXPIRED" ? (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact">
-              <span className="status-badge">Expired</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong>Tap request expired</strong>
-              </div>
-            </div>
-          ) : (
-            <div className="quick-create-panel pos-customer-capture-state pos-customer-capture-state-compact" data-testid="pos-customer-capture-ready-state">
-              <span className="status-badge status-complete">Ready</span>
-              <div className="pos-customer-capture-state-copy">
-                <strong data-testid="pos-customer-capture-ready-title">Ready</strong>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </>

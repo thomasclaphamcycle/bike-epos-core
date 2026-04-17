@@ -251,6 +251,8 @@ Minimum expectations depend on the surface changed:
 - Ensure verification commands run sequentially and not concurrently.
 - When normal manual inspection servers are running on `http://localhost:3100` and `http://localhost:5173`, prefer `scripts/dev_codex_guard.sh <command>` so the local inspection servers are stopped before the guarded workflow and restored afterward automatically.
 - Use `scripts/dev_stop_local.sh` only when you need the explicit stop step, and `scripts/dev_start_local.sh` to restore the normal inspection servers manually afterward.
+- If Codex or another sandboxed environment cannot launch Playwright browsers locally, start the repo Playwright bridge from a normal local shell with `npm run e2e:bridge:start`. The E2E wrapper will auto-use the saved bridge endpoint for `npm run e2e` and `npm run verify`.
+- For a durable macOS setup, install the repo LaunchAgent once with `npm run e2e:bridge:launchagent:install` from a normal local shell. That keeps the Playwright bridge available across logins without manual startup.
 
 ## Release Verification Rule
 
