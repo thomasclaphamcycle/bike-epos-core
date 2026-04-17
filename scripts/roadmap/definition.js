@@ -35,7 +35,7 @@ module.exports = {
             file("frontend/src/pages/PosPage.tsx", "React POS screen exists"),
             text("frontend/src/App.tsx", 'path="/pos"', "POS route is mounted"),
             file("scripts/pos_m28_smoke_tests.js", "POS smoke coverage exists"),
-            text("e2e/critical-flows.spec.js", "POS add to basket, checkout cash", "Playwright checkout flow exists"),
+            text("e2e/critical/critical-smoke.spec.js", "POS add to basket, checkout cash", "Playwright checkout flow exists"),
           ],
         },
         {
@@ -223,7 +223,7 @@ module.exports = {
             text("frontend/src/pages/InventoryStocktakesPage.tsx", "stocktake-scan-code", "Scan mode controls exist"),
             text("frontend/src/pages/InventoryStocktakesPage.tsx", "stocktake-bulk-import", "Bulk import controls exist"),
             text("frontend/src/pages/InventoryStocktakesPage.tsx", "Count Scan", "Stocktake scan action exists"),
-            text("e2e/critical-flows.spec.js", "Stocktake scan mode and bulk import", "Playwright stocktake scan coverage exists"),
+            text("e2e/inventory/stocktake.spec.js", "Stocktake scan mode and bulk import", "Playwright stocktake scan coverage exists"),
           ],
         },
         {

@@ -80,4 +80,4 @@ jobs:
         run: npm run build
 
       - name: Run critical E2E
-        run: CI=1 node scripts/run_with_test_env.js npx playwright test e2e/critical-flows.spec.js --workers=1
+        run: CI=1 node scripts/run_with_test_env.js npx playwright test e2e/critical --workers=1

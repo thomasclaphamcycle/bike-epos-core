@@ -101,7 +101,10 @@ const apiJsonWithHeaderBypass = async (
 };
 
 let sequence = 0;
-const uniqueToken = (prefix = "e2e") => `${prefix}-${Date.now()}-${++sequence}`;
+const uniqueToken = (prefix = "e2e") => {
+  const workerToken = process.env.TEST_WORKER_INDEX || process.env.TEST_PARALLEL_INDEX || "0";
+  return `${prefix}-${workerToken}-${process.pid}-${Date.now()}-${++sequence}`;
+};
 const frontendBaseUrl = process.env.REACT_FRONTEND_BASE_URL || "http://localhost:4173";
 const backendBaseUrl = process.env.TEST_BASE_URL || "http://localhost:3100";
 
