@@ -211,6 +211,8 @@ npm run dev:reset
 npm run dev:guard -- npm run verify
 ```
 
+`npm run dev:status` also reports the local customer-capture tunnel URL, pid, and log path when tunnel state files are present under `tmp/dev-local/`.
+
 `npm run verify` now always ends with a repo-scoped postflight check for verification leftovers, even if an earlier verify step fails, so the preferred recovery path after an interrupted local run is `npm run dev:reset` followed by `npm run dev:status`.
 
 6. Prepare the dedicated test database before running `npm test` or `npm run e2e`:
