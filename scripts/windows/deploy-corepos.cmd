@@ -18,6 +18,9 @@ cd /d C:\CorePOS
 call npx prisma migrate deploy
 if errorlevel 1 exit /b 1
 
+call npx prisma generate
+if errorlevel 1 exit /b 1
+
 call C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd restart corepos-backend
 if errorlevel 1 exit /b 1
 call C:\Users\coreposadmin\AppData\Roaming\npm\pm2.cmd restart corepos-frontend
