@@ -95,6 +95,7 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(firstCustomer.email);
   await expect(page.getByTestId("pos-customer-capture-generate")).toHaveCount(0);
 
+  await expect.poll(() => new URL(page.url()).searchParams.get("saleId")).toBeTruthy();
   const saleIdAfterCheckout = new URL(page.url()).searchParams.get("saleId");
   expect(saleIdAfterCheckout).toBeTruthy();
 

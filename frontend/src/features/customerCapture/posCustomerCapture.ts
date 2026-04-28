@@ -118,9 +118,13 @@ export const formatCustomerContactSummary = (
 };
 
 export const formatCaptureRelativeMinutes = (
-  targetDate: string,
+  targetDate: string | null | undefined,
   options?: { suffix?: "ago" | "remaining" },
 ) => {
+  if (!targetDate) {
+    return null;
+  }
+
   const targetTime = new Date(targetDate).getTime();
   if (Number.isNaN(targetTime)) {
     return null;

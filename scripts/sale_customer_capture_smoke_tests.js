@@ -433,6 +433,13 @@ const run = async () => {
     assert.equal(invalidStationEntry.status, 404);
     assert.equal(invalidStationEntry.payload.error.code, "CUSTOMER_CAPTURE_STATION_NOT_FOUND");
 
+    const malformedTokenEntry = await apiJson({
+      path: "/api/public/customer-capture/not-a-valid-token",
+      method: "GET",
+    });
+    assert.equal(malformedTokenEntry.status, 404);
+    assert.equal(malformedTokenEntry.payload.error.code, "CUSTOMER_CAPTURE_NOT_FOUND");
+
     const checkoutVariant = await createCheckoutReadyVariant(created, token);
     const preSaleBasket = await createBasket(created);
     const emptyCurrentBasketSession = await getCurrentBasketCaptureSession(preSaleBasket.id);
@@ -599,6 +606,21 @@ const run = async () => {
     });
     assert.equal(olderStationScopedTokenState.session.status, "ACTIVE");
 
+    const stationScopedSecondSubmit = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(stationScopedSecondSession.session.token)}`,
+      method: "POST",
+      body: {
+        firstName: "Station",
+        lastName: "Latest",
+        email: `station-latest-${token}@example.com`,
+      },
+    });
+    created.customerIds.add(stationScopedSecondSubmit.customer.id);
+
+    const stationEntryAfterLatestCompleted = await getCurrentCaptureStationEntry();
+    assert.equal(stationEntryAfterLatestCompleted.session.token, stationScopedFirstSession.session.token);
+    assert.equal(stationEntryAfterLatestCompleted.session.ownerType, "sale");
+
     const replacedSubmit = await apiJson({
       path: `/api/public/customer-capture/${encodeURIComponent(firstSessionPayload.session.token)}`,
       method: "POST",
@@ -699,6 +721,46 @@ const run = async () => {
     });
     assert.equal(completedRetry.status, 409);
     assert.equal(completedRetry.payload.error.code, "CUSTOMER_CAPTURE_COMPLETED");
+
+    const concurrentSale = await createSale(created, location.id);
+    const concurrentSession = await createCaptureSession(created, concurrentSale.id);
+    const concurrentResponses = await Promise.all([
+      apiJson({
+        path: `/api/public/customer-capture/${encodeURIComponent(concurrentSession.session.token)}`,
+        method: "POST",
+        body: {
+          firstName: "Race",
+          lastName: "Winner",
+          email: `race-winner-${token}@example.com`,
+        },
+      }),
+      apiJson({
+        path: `/api/public/customer-capture/${encodeURIComponent(concurrentSession.session.token)}`,
+        method: "POST",
+        body: {
+          firstName: "Race",
+          lastName: "Replay",
+          email: `race-replay-${token}@example.com`,
+        },
+      }),
+    ]);
+    for (const response of concurrentResponses) {
+      if (response.status === 201 && response.payload?.customer?.id) {
+        created.customerIds.add(response.payload.customer.id);
+      }
+    }
+    const concurrentSuccesses = concurrentResponses.filter((response) => response.status === 201);
+    const concurrentConflicts = concurrentResponses.filter((response) => response.status === 409);
+    assert.equal(concurrentSuccesses.length, 1);
+    assert.equal(concurrentConflicts.length, 1);
+    assert.equal(concurrentConflicts[0].payload.error.code, "CUSTOMER_CAPTURE_COMPLETED");
+
+    const concurrentSalePayload = await apiJsonOrThrow({
+      path: `/api/sales/${encodeURIComponent(concurrentSale.id)}`,
+      method: "GET",
+      headers: STAFF_HEADERS,
+    });
+    assert.equal(concurrentSalePayload.sale.customer.id, concurrentSuccesses[0].payload.customer.id);
 
     const createdPreviewSale = await createSale(created, location.id);
     const createdPreviewSession = await createCaptureSession(created, createdPreviewSale.id);
