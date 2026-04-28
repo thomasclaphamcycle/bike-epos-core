@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { PosSaleSource, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../utils/http";
 
@@ -30,6 +30,8 @@ type RawSalesHistoryRow = {
   storeId: string;
   storeName: string;
   workshopJobId: string | null;
+  source: PosSaleSource;
+  sourceRef: string | null;
 };
 
 type RawSalesHistoryCountRow = {
@@ -160,6 +162,22 @@ const toSoldByName = (row: RawSalesHistoryRow) =>
   ?? normalizeOptionalText(row.soldByUsername)
   ?? "Unknown";
 
+const toSalesHistorySource = (row: Pick<RawSalesHistoryRow, "source" | "workshopJobId">) => {
+  if (row.source === PosSaleSource.WORKSHOP || (row.source === PosSaleSource.RETAIL && row.workshopJobId)) {
+    return "workshop";
+  }
+  if (row.source === PosSaleSource.WEB) {
+    return "online";
+  }
+  if (row.source === PosSaleSource.QUOTE) {
+    return "quote";
+  }
+  if (row.source === PosSaleSource.EXCHANGE) {
+    return "exchange";
+  }
+  return "pos";
+};
+
 const fromCountValue = (value: number | bigint) =>
   typeof value === "bigint" ? Number(value) : value;
 
@@ -195,7 +213,9 @@ export const listSalesHistory = async (input: ListSalesHistoryInput) => {
       NULLIF(TRIM(COALESCE(u.username, '')), '') AS "soldByUsername",
       l.id AS "storeId",
       l.name AS "storeName",
-      s."workshopJobId" AS "workshopJobId"
+      s."workshopJobId" AS "workshopJobId",
+      s."source" AS "source",
+      s."sourceRef" AS "sourceRef"
     FROM "Sale" s
     LEFT JOIN "Receipt" r ON r."saleId" = s.id
     LEFT JOIN "Customer" c ON c.id = s."customerId"
@@ -232,8 +252,8 @@ export const listSalesHistory = async (input: ListSalesHistoryInput) => {
         id: row.storeId,
         name: row.storeName,
       },
-      reference: row.workshopJobId,
-      source: row.workshopJobId ? "workshop" : "pos",
+      reference: row.sourceRef ?? row.workshopJobId,
+      source: toSalesHistorySource(row),
     })),
     pagination: {
       page,

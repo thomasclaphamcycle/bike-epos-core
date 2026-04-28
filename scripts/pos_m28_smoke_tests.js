@@ -286,6 +286,8 @@ const run = async () => {
       method: "POST",
       headers: staffHeaders,
       body: JSON.stringify({
+        source: "QUOTE",
+        sourceRef: `quote-${uniqueRef()}`,
         items: [
           {
             variantId: variantRes.json.id,
@@ -300,6 +302,8 @@ const run = async () => {
     assert.equal(preloadedBasketRes.json.items[0].quantity, 2);
     assert.equal(preloadedBasketRes.json.items[0].unitPricePence, 777);
     assert.equal(preloadedBasketRes.json.items[0].type, "PART");
+    assert.equal(preloadedBasketRes.json.source, "QUOTE");
+    assert.equal(preloadedBasketRes.json.sourceLabel, "Quote");
     state.basketIds.add(preloadedBasketRes.json.id);
 
     const createBasketRes = await fetchJson("/api/baskets", {
@@ -308,6 +312,8 @@ const run = async () => {
       body: JSON.stringify({}),
     });
     assert.equal(createBasketRes.status, 201, JSON.stringify(createBasketRes.json));
+    assert.equal(createBasketRes.json.source, "RETAIL");
+    assert.equal(createBasketRes.json.sourceLabel, "Retail Sale");
     const basketId = createBasketRes.json.id;
     state.basketIds.add(basketId);
 
@@ -381,6 +387,8 @@ const run = async () => {
     assert.equal(checkoutRes.status, 201, JSON.stringify(checkoutRes.json));
     assert.ok(checkoutRes.json.sale);
     assert.equal(checkoutRes.json.sale.totalPence, expectedTotal);
+    assert.equal(checkoutRes.json.sale.source, "RETAIL");
+    assert.equal(checkoutRes.json.sale.sourceLabel, "Retail Sale");
     assert.equal(checkoutRes.json.saleItems.length, 1);
     assert.equal(checkoutRes.json.saleItems[0].quantity, 3);
     state.saleIds.add(checkoutRes.json.sale.id);
@@ -401,6 +409,8 @@ const run = async () => {
     });
     assert.equal(saleRes.status, 200, JSON.stringify(saleRes.json));
     assert.equal(saleRes.json.sale.id, checkoutRes.json.sale.id);
+    assert.equal(saleRes.json.sale.source, "RETAIL");
+    assert.equal(saleRes.json.sale.sourceLabel, "Retail Sale");
 
     const onHandRes = await fetchJson(
       `/api/inventory/on-hand?variantId=${encodeURIComponent(variantRes.json.id)}`,

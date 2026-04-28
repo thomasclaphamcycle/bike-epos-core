@@ -1,8 +1,9 @@
-import { Basket, BasketItem, BasketStatus } from "@prisma/client";
+import { Basket, BasketItem, BasketStatus, PosSaleSource } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findBarcodeOrThrow } from "./productLookupService";
 import { HttpError, isUuid } from "../utils/http";
 import { toPosLineItemType } from "./posLineItemType";
+import { buildPosSaleSourceSummary } from "./posSaleSource";
 
 type BasketWithItems = Basket & {
   customer: {
@@ -35,6 +36,8 @@ type AddBasketItemInput = {
 
 type CreateBasketInput = {
   customerId?: string | null;
+  source?: PosSaleSource;
+  sourceRef?: string | null;
   items?: Array<{
     variantId: string;
     quantity: number;
@@ -102,6 +105,7 @@ const toBasketResponse = (basket: BasketWithItems) => {
         }
       : null,
     status: basket.status,
+    ...buildPosSaleSourceSummary(basket.source, basket.sourceRef),
     createdAt: basket.createdAt,
     updatedAt: basket.updatedAt,
     items: basket.items.map((item) => ({
@@ -127,6 +131,8 @@ const toBasketResponse = (basket: BasketWithItems) => {
 
 export const createBasket = async (input: CreateBasketInput = {}) => {
   const requestedCustomerId = input.customerId ?? null;
+  const requestedSource = input.source ?? PosSaleSource.RETAIL;
+  const requestedSourceRef = input.sourceRef?.trim() || null;
   const requestedItems = Array.isArray(input.items) ? input.items : [];
 
   for (const item of requestedItems) {
@@ -163,6 +169,8 @@ export const createBasket = async (input: CreateBasketInput = {}) => {
       data: {
         status: BasketStatus.OPEN,
         customerId: requestedCustomerId,
+        source: requestedSource,
+        sourceRef: requestedSourceRef,
       },
       select: { id: true },
     });

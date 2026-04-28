@@ -23,13 +23,13 @@ model Location {
 }
 
 model Product {
-  id          String  @id @default(cuid())
-  name        String
-  brand       String?
-  category    String?
-  description String?
+  id               String  @id @default(cuid())
+  name             String
+  brand            String?
+  category         String?
+  description      String?
   keySellingPoints String?
-  isActive    Boolean @default(true)
+  isActive         Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -437,12 +437,22 @@ enum BasketStatus {
   ABANDONED
 }
 
+enum PosSaleSource {
+  RETAIL
+  QUOTE
+  WEB
+  WORKSHOP
+  EXCHANGE
+}
+
 model Basket {
-  id         String       @id @default(uuid()) @db.Uuid
-  customerId String?      @db.Uuid
-  status     BasketStatus @default(OPEN)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String?       @db.Uuid
+  status     BasketStatus  @default(OPEN)
+  source     PosSaleSource @default(RETAIL)
+  sourceRef  String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   customer                Customer?                    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items                   BasketItem[]
@@ -450,6 +460,8 @@ model Basket {
   customerCaptureSessions SaleCustomerCaptureSession[]
 
   @@index([customerId])
+  @@index([source])
+  @@index([source, sourceRef])
 }
 
 model BasketItem {
@@ -560,19 +572,21 @@ enum SaleCustomerCaptureMatchType {
 }
 
 model Sale {
-  id                 String    @id @default(uuid()) @db.Uuid
-  basketId           String?   @unique @db.Uuid
-  workshopJobId      String?   @unique @db.Uuid
-  customerId         String?   @db.Uuid
-  exchangeFromSaleId String?   @db.Uuid
+  id                 String        @id @default(uuid()) @db.Uuid
+  basketId           String?       @unique @db.Uuid
+  workshopJobId      String?       @unique @db.Uuid
+  customerId         String?       @db.Uuid
+  exchangeFromSaleId String?       @db.Uuid
   locationId         String
+  source             PosSaleSource @default(RETAIL)
+  sourceRef          String?
   subtotalPence      Int
   taxPence           Int
   totalPence         Int
-  changeDuePence     Int       @default(0)
-  createdAt          DateTime  @default(now())
+  changeDuePence     Int           @default(0)
+  createdAt          DateTime      @default(now())
   completedAt        DateTime?
-  receiptNumber      String?   @unique
+  receiptNumber      String?       @unique
   createdByStaffId   String?
 
   basket                  Basket?                      @relation(fields: [basketId], references: [id], onDelete: SetNull)
@@ -599,6 +613,8 @@ model Sale {
   @@index([locationId])
   @@index([completedAt])
   @@index([createdByStaffId])
+  @@index([source])
+  @@index([source, sourceRef])
 }
 
 model SaleCustomerCaptureSession {
@@ -1119,43 +1135,43 @@ model WebOrderItem {
 }
 
 model WebOrderShipment {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  webOrderId          String                   @db.Uuid
-  shipmentNumber      Int
-  status              WebOrderShipmentStatus   @default(LABEL_READY)
-  providerKey         String
-  providerDisplayName String
-  providerEnvironment String?
-  serviceCode         String
-  serviceName         String
-  trackingNumber      String                   @unique
-  labelFormat         ShipmentLabelFormat
-  labelStorageKind    ShipmentLabelStorageKind @default(INLINE_TEXT)
-  labelMimeType       String
-  labelFileName       String
-  labelContent        String                   @db.Text
-  providerReference   String?
+  id                        String                   @id @default(uuid()) @db.Uuid
+  webOrderId                String                   @db.Uuid
+  shipmentNumber            Int
+  status                    WebOrderShipmentStatus   @default(LABEL_READY)
+  providerKey               String
+  providerDisplayName       String
+  providerEnvironment       String?
+  serviceCode               String
+  serviceName               String
+  trackingNumber            String                   @unique
+  labelFormat               ShipmentLabelFormat
+  labelStorageKind          ShipmentLabelStorageKind @default(INLINE_TEXT)
+  labelMimeType             String
+  labelFileName             String
+  labelContent              String                   @db.Text
+  providerReference         String?
   providerShipmentReference String?
   providerTrackingReference String?
-  providerLabelReference String?
-  providerStatus      String?
-  providerRefundStatus String?
-  providerMetadata    Json?
-  labelGeneratedAt    DateTime                 @default(now())
-  providerSyncedAt    DateTime?
-  providerSyncError   String?
-  printPreparedAt     DateTime?
-  printedAt           DateTime?
-  dispatchedAt        DateTime?
-  voidRequestedAt     DateTime?
-  voidedAt            DateTime?
-  reprintCount        Int                      @default(0)
-  createdByStaffId    String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  providerLabelReference    String?
+  providerStatus            String?
+  providerRefundStatus      String?
+  providerMetadata          Json?
+  labelGeneratedAt          DateTime                 @default(now())
+  providerSyncedAt          DateTime?
+  providerSyncError         String?
+  printPreparedAt           DateTime?
+  printedAt                 DateTime?
+  dispatchedAt              DateTime?
+  voidRequestedAt           DateTime?
+  voidedAt                  DateTime?
+  reprintCount              Int                      @default(0)
+  createdByStaffId          String?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
-  webOrder       WebOrder @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
-  createdByStaff User?    @relation("WebOrderShipmentCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  webOrder       WebOrder                    @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
+  createdByStaff User?                       @relation("WebOrderShipmentCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   syncEvents     ShippingProviderSyncEvent[]
 
   @@unique([webOrderId, shipmentNumber])
@@ -1166,27 +1182,27 @@ model WebOrderShipment {
 }
 
 model ShippingProviderSyncEvent {
-  id                        String                         @id @default(uuid()) @db.Uuid
+  id                        String                          @id @default(uuid()) @db.Uuid
   providerKey               String
   providerEventId           String
   providerEventType         String
-  shipmentId                String?                        @db.Uuid
+  shipmentId                String?                         @db.Uuid
   providerShipmentReference String?
   providerTrackingReference String?
   trackingNumber            String?
-  signatureVerified         Boolean                        @default(false)
+  signatureVerified         Boolean                         @default(false)
   status                    ShippingProviderSyncEventStatus @default(RECEIVED)
   occurredAt                DateTime?
-  firstReceivedAt           DateTime                       @default(now())
-  lastReceivedAt            DateTime                       @default(now())
+  firstReceivedAt           DateTime                        @default(now())
+  lastReceivedAt            DateTime                        @default(now())
   processedAt               DateTime?
   syncAppliedAt             DateTime?
-  deliveryCount             Int                            @default(1)
+  deliveryCount             Int                             @default(1)
   errorCode                 String?
   errorMessage              String?
   payload                   Json?
-  createdAt                 DateTime                       @default(now())
-  updatedAt                 DateTime                       @updatedAt
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
 
   shipment WebOrderShipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
 
@@ -1307,18 +1323,18 @@ model Customer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  baskets               Basket[]
-  sales                 Sale[]
+  baskets                 Basket[]
+  sales                   Sale[]
   customerCaptureSessions SaleCustomerCaptureSession[]
-  account               CustomerAccount?
-  workshopJobs          WorkshopJob[]
-  bikes                 CustomerBike[]
-  creditAccounts        CreditAccount[]
-  reminderCandidates    ReminderCandidate[]
-  workshopNotifications WorkshopNotification[]
-  workshopConversations WorkshopConversation[]
-  hireBookings          HireBooking[]
-  webOrders             WebOrder[]
+  account                 CustomerAccount?
+  workshopJobs            WorkshopJob[]
+  bikes                   CustomerBike[]
+  creditAccounts          CreditAccount[]
+  reminderCandidates      ReminderCandidate[]
+  workshopNotifications   WorkshopNotification[]
+  workshopConversations   WorkshopConversation[]
+  hireBookings            HireBooking[]
+  webOrders               WebOrder[]
 
   @@index([firstName])
   @@index([lastName])

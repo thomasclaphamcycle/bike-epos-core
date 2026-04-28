@@ -24,8 +24,11 @@ import { parseCombinedCustomerName } from "../utils/customerName";
 import {
   DEFAULT_SALE_CONTEXT,
   getPosOpenState,
+  getPosSaleSourceLabel,
+  getSaleContextSourceRef,
   resolvePosLineItemType,
   type PosLineItem,
+  type PosSaleSource,
   type SaleContext,
 } from "../features/pos/posContext";
 import { toBackendUrl } from "../utils/backendUrl";
@@ -69,6 +72,10 @@ type BasketResponse = {
   id: string;
   customer: CustomerSearchRow | null;
   status: string;
+  source?: PosSaleSource;
+  sourceRef?: string | null;
+  sourceLabel?: string;
+  sourceDetail?: string | null;
   items: Array<{
     id: string;
     variantId: string;
@@ -108,6 +115,10 @@ type SaleResponse = {
     taxPence: number;
     totalPence: number;
     completedAt: string | null;
+    source?: PosSaleSource;
+    sourceRef?: string | null;
+    sourceLabel?: string;
+    sourceDetail?: string | null;
     customer: CustomerSearchRow | null;
   };
   saleItems: Array<{
@@ -628,9 +639,12 @@ export const PosPage = () => {
     requestId?: number;
   }) => {
     const requestId = options?.requestId ?? beginPosLifecycleRequest();
+    const basketSaleContext = options?.saleContext ?? DEFAULT_SALE_CONTEXT;
     const created = await apiPost<BasketResponse>("/api/baskets", {
       ...(options?.preloadedItems?.length ? { items: options.preloadedItems } : {}),
       ...(options?.customerId !== undefined ? { customerId: options.customerId } : {}),
+      source: basketSaleContext.type,
+      sourceRef: getSaleContextSourceRef(basketSaleContext),
     });
     if (!canApplyPosLifecycle(requestId)) {
       return null;
@@ -650,7 +664,7 @@ export const PosPage = () => {
       setHighlightedCustomerIndex(-1);
       setShowCreateCustomer(false);
     }
-    setSaleContext(options?.saleContext ?? DEFAULT_SALE_CONTEXT);
+    setSaleContext(basketSaleContext);
     setContextCustomerId(created.customer?.id ?? options?.customerId ?? null);
     if (!canApplyPosLifecycle(requestId)) {
       return null;
@@ -1654,16 +1668,17 @@ export const PosPage = () => {
       { key: "PART", label: "Parts", items: parts },
     ].filter((group) => group.items.length > 0);
   }, [basket?.items]);
-  const contextHeaderTitle = saleContext.type === "WORKSHOP"
-    ? "Workshop Sale"
-    : "Retail Sale";
-  const contextHeaderMeta = saleContext.type === "WORKSHOP"
+  const apiSourceLabel = sale?.sale.sourceLabel ?? basket?.sourceLabel ?? null;
+  const apiSourceDetail = sale?.sale.sourceDetail ?? basket?.sourceDetail ?? null;
+  const contextHeaderTitle = apiSourceLabel ?? getPosSaleSourceLabel(saleContext.type);
+  const workshopContextMeta = saleContext.type === "WORKSHOP"
     ? [
         `Job #${saleContext.jobId}`,
         saleContext.customerName,
         saleContext.bikeLabel,
       ].filter(Boolean).join(" | ")
     : null;
+  const contextHeaderMeta = workshopContextMeta || apiSourceDetail;
   const searchResultSummary = searchText.trim()
     ? `${searchRows.length} result${searchRows.length === 1 ? "" : "s"}`
     : "";
@@ -1673,9 +1688,8 @@ export const PosPage = () => {
     || (saleContext.type === "WORKSHOP" ? saleContext.customerName : null)
     || "Walk-in";
   const activeSourceLabel = contextHeaderTitle;
-  const activeSourceDetail = saleContext.type === "WORKSHOP"
-    ? `Job #${saleContext.jobId}`
-    : null;
+  const activeSourceDetail = apiSourceDetail
+    ?? (saleContext.type === "WORKSHOP" ? `Job #${saleContext.jobId}` : null);
   const activeCustomerStatusLabel = selectedCustomer
     ? "Linked profile"
     : saleContext.type === "WORKSHOP" && saleContext.customerName

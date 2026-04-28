@@ -1,4 +1,4 @@
-import { BasketStatus, Prisma, WorkshopJobLineType, WorkshopJobStatus, WorkshopServicePricingMode } from "@prisma/client";
+import { BasketStatus, PosSaleSource, Prisma, WorkshopJobLineType, WorkshopJobStatus, WorkshopServicePricingMode } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { emitEvent } from "../utils/domainEvent";
 import { HttpError, isUuid } from "../utils/http";
@@ -29,6 +29,7 @@ import {
   toWorkshopJobStatus,
   type WorkshopExecutionStatus,
 } from "./workshopStatusService";
+import { buildPosSaleSourceSummary } from "./posSaleSource";
 
 type CreateWorkshopJobInput = {
   customerId?: string | null;
@@ -810,6 +811,7 @@ const buildBasketResponseTx = async (tx: Prisma.TransactionClient, basketId: str
   return {
     id: basket.id,
     status: basket.status,
+    ...buildPosSaleSourceSummary(basket.source, basket.sourceRef),
     createdAt: basket.createdAt,
     updatedAt: basket.updatedAt,
     items: basket.items.map((item) => ({
@@ -1627,6 +1629,8 @@ export const finalizeWorkshopJob = async (workshopJobId: string) => {
     const basket = await tx.basket.create({
       data: {
         status: BasketStatus.OPEN,
+        source: PosSaleSource.WORKSHOP,
+        sourceRef: workshopJobId,
       },
     });
 

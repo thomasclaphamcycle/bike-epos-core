@@ -1,4 +1,4 @@
-import { PaymentMethod, Prisma } from "@prisma/client";
+import { PaymentMethod, PosSaleSource, Prisma } from "@prisma/client";
 import { logCorePosError, logCorePosEvent, logOperationalEvent } from "../lib/operationalLogger";
 import { prisma } from "../lib/prisma";
 import { emitEvent } from "../utils/domainEvent";
@@ -425,6 +425,8 @@ export const checkoutWorkshopJobToSale = async (
             workshopJobId,
             customerId: workshopJob.customerId,
             locationId: workshopJob.locationId,
+            source: PosSaleSource.WORKSHOP,
+            sourceRef: workshopJobId,
             subtotalPence: saleTotalPence,
             taxPence: 0,
             totalPence: saleTotalPence,
