@@ -14241,14 +14241,6 @@ body.rota-row-drag-copy-active {
   margin-bottom: 8px;
 }
 
-.pos-search-field span {
-  font-size: 0.84rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #244a67;
-}
-
 .pos-search-field input {
   min-height: 68px;
   padding: 0 18px;

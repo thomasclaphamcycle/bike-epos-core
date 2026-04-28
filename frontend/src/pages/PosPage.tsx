@@ -1650,7 +1650,6 @@ export const PosPage = () => {
                   >
                     New Sale
                   </button>
-                  <span>Sale {sale?.sale.id || saleId || "-"}</span>
                   <span className="pos-meta-shortcuts">
                     <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
                   </span>
@@ -1759,7 +1758,6 @@ export const PosPage = () => {
             <section className="pos-panel pos-search-panel">
               <div className="pos-panel-heading">
                 <div>
-                  <div className="pos-section-kicker">Input</div>
                   <h2>Search / Scan</h2>
                 </div>
                 {searchText.trim() ? (
@@ -1770,10 +1768,10 @@ export const PosPage = () => {
               </div>
 
               <label className="pos-search-field">
-                <span>Search / Scan</span>
                 <input
                   ref={searchInputRef}
                   data-testid="pos-product-search"
+                  aria-label="Search / Scan"
                   value={searchText}
                   onChange={(event) => setSearchText(event.target.value)}
                   onKeyDown={(event) => {
