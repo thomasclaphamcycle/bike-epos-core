@@ -326,7 +326,15 @@ export const preloadPrimaryRoute = async (path: string) => {
     [(value) => value.startsWith("/rental/") && value !== "/rental/calendar", NavigationPlaceholderPage.preload],
     [(value) => value === "/online-store/orders", OnlineStoreOrdersPage.preload],
     [(value) => value.startsWith("/online-store/") && value !== "/online-store/orders", NavigationPlaceholderPage.preload],
-    [(value) => value === "/settings/store-info" || value === "/management/settings", SystemSettingsPage.preload],
+    [
+      (value) =>
+        value === "/settings/store-info"
+        || value === "/settings/printers"
+        || value === "/settings/workshop"
+        || value === "/settings/shipping"
+        || value === "/management/settings",
+      SystemSettingsPage.preload,
+    ],
     [(value) => value === "/management/staff", StaffManagementPage.preload],
     [(value) => value === "/management/admin-review", AdminReviewPage.preload],
     [(value) => value === "/settings/system-diagnostics" || value === "/management/health", OpsHealthPage.preload],

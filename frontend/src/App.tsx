@@ -636,7 +636,10 @@ const AuthedApp = () => (
             />,
           )}
         />
-        <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage />)} />
+        <Route path="/settings/store-info" element={adminOnly(<SystemSettingsPage mode="store-info" />)} />
+        <Route path="/settings/printers" element={adminOnly(<SystemSettingsPage mode="printers" />)} />
+        <Route path="/settings/workshop" element={adminOnly(<SystemSettingsPage mode="workshop" />)} />
+        <Route path="/settings/shipping" element={adminOnly(<SystemSettingsPage mode="shipping" />)} />
         <Route path="/settings/staff-list" element={managerOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
         <Route path="/settings/staff-rota" element={managerOnly(<StaffRotaToolsPage />)} />
@@ -648,20 +651,8 @@ const AuthedApp = () => (
               description="POS behavior defaults and operational controls will expand here while the current persisted settings stay available through Store Info."
               links={[
                 { label: "Store Info", to: "/settings/store-info" },
+                { label: "Printers", to: "/settings/printers" },
                 { label: "Receipts", to: "/settings/receipts" },
-              ]}
-            />,
-          )}
-        />
-        <Route
-          path="/settings/workshop"
-          element={adminOnly(
-            <NavigationPlaceholderPage
-              title="Settings · Workshop Settings"
-              description="Workshop defaults and workflow controls will live here as the settings UX grows around the existing workshop service behavior."
-              links={[
-                { label: "Store Info", to: "/settings/store-info" },
-                { label: "Inventory Settings", to: "/settings/inventory" },
               ]}
             />,
           )}
@@ -674,6 +665,7 @@ const AuthedApp = () => (
               description="Inventory thresholds, handling defaults, and later stock-control preferences are scaffolded here for the finalized settings tree."
               links={[
                 { label: "Store Info", to: "/settings/store-info" },
+                { label: "Shipping", to: "/settings/shipping" },
                 { label: "Payments", to: "/settings/payments" },
               ]}
             />,
@@ -687,6 +679,7 @@ const AuthedApp = () => (
               description="Payment processor and tender configuration will be exposed here without changing the current validated tender and till workflows."
               links={[
                 { label: "Store Info", to: "/settings/store-info" },
+                { label: "Shipping", to: "/settings/shipping" },
                 { label: "Integrations", to: "/settings/integrations" },
               ]}
             />,
@@ -700,6 +693,7 @@ const AuthedApp = () => (
               description="External integration controls and connection status will be surfaced here as operational integrations mature."
               links={[
                 { label: "Store Info", to: "/settings/store-info" },
+                { label: "Shipping", to: "/settings/shipping" },
                 { label: "System / Diagnostics", to: "/settings/system-diagnostics" },
               ]}
             />,
@@ -713,6 +707,7 @@ const AuthedApp = () => (
               description="Receipt formatting and print-output configuration are scaffolded here while current receipt generation remains unchanged."
               links={[
                 { label: "Store Info", to: "/settings/store-info" },
+                { label: "Printers", to: "/settings/printers" },
                 { label: "POS Settings", to: "/settings/pos" },
               ]}
             />,

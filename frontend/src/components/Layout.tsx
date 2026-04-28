@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useToasts } from "./ToastProvider";
@@ -26,6 +26,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const appVersionLabel = useRuntimeVersionLabel();
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const onLogout = async () => {
     try {
@@ -133,6 +134,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [visibleSections]);
 
   const userDisplayName = user?.name || user?.username || "Signed in";
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
+  }, [currentPath]);
 
   return (
     <div className="layout-root">
@@ -254,7 +260,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       <div className="app-shell">
-        <main className={currentPath.startsWith("/pos")
+        <main
+          ref={mainRef}
+          className={currentPath.startsWith("/pos")
           ? "app-main app-main--workspace app-main--pos"
           : isWorkshopOperatingScreen || isWorkshopCalendarOverview
             ? "app-main app-main--workspace app-main--workspace-wide"
