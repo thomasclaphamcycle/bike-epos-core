@@ -17,6 +17,11 @@ type SettingDefinition<T> = {
   validate: (value: unknown) => T;
 };
 
+export type PosQuickAddProductSetting = {
+  label: string;
+  query: string;
+};
+
 export type ShopSettings = {
   store: {
     name: string;
@@ -59,6 +64,7 @@ export type ShopSettings = {
     requireLineNotes: boolean;
     scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
     quickAddEnabled: boolean;
+    quickAddProducts: PosQuickAddProductSetting[];
     duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
     enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
     splitPaymentsEnabled: boolean;
@@ -147,6 +153,14 @@ const DEFAULT_WORKSHOP_COMMERCIAL_SUGGESTIONS_ENABLED = true;
 const DEFAULT_WORKSHOP_COMMERCIAL_LONG_GAP_DAYS = 180;
 const DEFAULT_WORKSHOP_COMMERCIAL_RECENT_SERVICE_COOLDOWN_DAYS = 60;
 const STORE_LOGO_UPLOAD_PATH_PREFIX = "/uploads/store-logos/";
+const DEFAULT_POS_QUICK_ADD_PRODUCTS: PosQuickAddProductSetting[] = [
+  { label: "Inner Tube", query: "Inner Tube" },
+  { label: "Chain Lube", query: "Chain Lube" },
+  { label: "Brake Pads", query: "Brake Pads" },
+  { label: "Helmet", query: "Helmet" },
+  { label: "Floor Pump", query: "Floor Pump" },
+  { label: "City Bike", query: "City Bike" },
+];
 
 type LegacySettingsFallbacks = {
   receiptSettings?: {
@@ -428,6 +442,34 @@ const normalizeEnumArraySetting = <T extends readonly string[]>(
   return uniqueValues;
 };
 
+const normalizeQuickAddProductsSetting = (value: unknown, field: string): PosQuickAddProductSetting[] => {
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, `${field} must be an array`, "INVALID_SETTINGS");
+  }
+
+  if (value.length > 12) {
+    throw new HttpError(400, `${field} can include at most 12 products`, "INVALID_SETTINGS");
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new HttpError(400, `${field}[${index}] must be an object`, "INVALID_SETTINGS");
+    }
+
+    const record = entry as Record<string, unknown>;
+    return {
+      label: normalizeTextSetting(record.label, `${field}[${index}].label`, {
+        allowEmpty: false,
+        maxLength: 48,
+      }),
+      query: normalizeTextSetting(record.query, `${field}[${index}].query`, {
+        allowEmpty: false,
+        maxLength: 120,
+      }),
+    };
+  });
+};
+
 const normalizeNullableCoordinateSetting = (
   value: unknown,
   field: string,
@@ -653,6 +695,11 @@ const SETTINGS_DEFINITIONS = {
     key: "pos.quickAddEnabled",
     defaultValue: true,
     validate: (value: unknown) => normalizeBooleanSetting(value, "pos.quickAddEnabled"),
+  },
+  "pos.quickAddProducts": {
+    key: "pos.quickAddProducts",
+    defaultValue: DEFAULT_POS_QUICK_ADD_PRODUCTS,
+    validate: (value: unknown) => normalizeQuickAddProductsSetting(value, "pos.quickAddProducts"),
   },
   "pos.duplicateScanBehavior": {
     key: "pos.duplicateScanBehavior",
@@ -955,6 +1002,10 @@ const toSettingsSnapshot = (
       quickAddEnabled: getSettingValue(
         valueByKey.get("pos.quickAddEnabled"),
         SETTINGS_DEFINITIONS["pos.quickAddEnabled"],
+      ),
+      quickAddProducts: getSettingValue(
+        valueByKey.get("pos.quickAddProducts"),
+        SETTINGS_DEFINITIONS["pos.quickAddProducts"],
       ),
       duplicateScanBehavior: getSettingValue(
         valueByKey.get("pos.duplicateScanBehavior"),

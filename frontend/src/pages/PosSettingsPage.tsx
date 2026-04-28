@@ -24,6 +24,10 @@ type PosSettings = {
   requireLineNotes: boolean;
   scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
   quickAddEnabled: boolean;
+  quickAddProducts: Array<{
+    label: string;
+    query: string;
+  }>;
   duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
   enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
   splitPaymentsEnabled: boolean;
@@ -66,6 +70,14 @@ const DEFAULT_POS_SETTINGS: PosSettings = {
   requireLineNotes: false,
   scanQuantityMode: "INCREMENT_ONE",
   quickAddEnabled: true,
+  quickAddProducts: [
+    { label: "Inner Tube", query: "Inner Tube" },
+    { label: "Chain Lube", query: "Chain Lube" },
+    { label: "Brake Pads", query: "Brake Pads" },
+    { label: "Helmet", query: "Helmet" },
+    { label: "Floor Pump", query: "Floor Pump" },
+    { label: "City Bike", query: "City Bike" },
+  ],
   duplicateScanBehavior: "INCREMENT_QUANTITY",
   enabledTenderMethods: ["CARD", "CASH"],
   splitPaymentsEnabled: true,
@@ -89,6 +101,9 @@ const TENDER_OPTIONS: Array<{ value: PosSettings["enabledTenderMethods"][number]
 const withPosDefaults = (settings: Partial<PosSettings> | null | undefined): PosSettings => ({
   ...DEFAULT_POS_SETTINGS,
   ...(settings ?? {}),
+  quickAddProducts: Array.isArray(settings?.quickAddProducts)
+    ? settings.quickAddProducts
+    : DEFAULT_POS_SETTINGS.quickAddProducts,
   enabledTenderMethods:
     settings?.enabledTenderMethods && settings.enabledTenderMethods.length > 0
       ? settings.enabledTenderMethods
@@ -164,6 +179,43 @@ export const PosSettingsPage = () => {
         enabledTenderMethods: nextTenderMethods,
       };
     });
+  };
+
+  const updateQuickAddProduct = (
+    index: number,
+    field: "label" | "query",
+    value: string,
+  ) => {
+    setSettings((current) => ({
+      ...current,
+      quickAddProducts: current.quickAddProducts.map((entry, entryIndex) => (
+        entryIndex === index ? { ...entry, [field]: value } : entry
+      )),
+    }));
+  };
+
+  const addQuickAddProduct = () => {
+    setSettings((current) => {
+      if (current.quickAddProducts.length >= 12) {
+        error("Quick-add products are limited to 12 buttons.");
+        return current;
+      }
+
+      return {
+        ...current,
+        quickAddProducts: [
+          ...current.quickAddProducts,
+          { label: "New quick add", query: "New quick add" },
+        ],
+      };
+    });
+  };
+
+  const removeQuickAddProduct = (index: number) => {
+    setSettings((current) => ({
+      ...current,
+      quickAddProducts: current.quickAddProducts.filter((_, entryIndex) => entryIndex !== index),
+    }));
   };
 
   const loadSettings = async () => {
@@ -462,17 +514,79 @@ export const PosSettingsPage = () => {
               </select>
             </label>
             <ToggleSetting
-              checked={settings.quickAddEnabled}
-              label="Show quick-add products"
-              description="Keeps common demo or high-volume products one click away."
-              onChange={(checked) => updateSetting("quickAddEnabled", checked)}
-            />
-            <ToggleSetting
               checked={settings.barcodeSearchAutoFocus}
               label="Focus search box when POS opens"
               description="Makes the scanner/search field ready without an extra click."
               onChange={(checked) => updateSetting("barcodeSearchAutoFocus", checked)}
             />
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="store-info-section pos-settings-section" as="section">
+          <SectionHeader
+            eyebrow="Quick add"
+            title="Choose the POS quick-add buttons"
+            description="Set the button label staff see and the product lookup text CorePOS uses to find the matching SKU, barcode, or product name."
+          />
+          <div className="pos-quick-add-settings-panel">
+            <ToggleSetting
+              checked={settings.quickAddEnabled}
+              label="Show quick-add products on POS"
+              description="When enabled, these buttons appear under the search box for fast one-tap product entry."
+              onChange={(checked) => updateSetting("quickAddEnabled", checked)}
+            />
+
+            <div className="pos-quick-add-settings-list">
+              {settings.quickAddProducts.length > 0 ? (
+                settings.quickAddProducts.map((entry, index) => (
+                  <div className="pos-quick-add-settings-row" key={`quick-add-${index}`}>
+                    <label>
+                      Button label
+                      <input
+                        maxLength={48}
+                        value={entry.label}
+                        placeholder="Inner Tube"
+                        onChange={(event) => updateQuickAddProduct(index, "label", event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Product lookup
+                      <input
+                        maxLength={120}
+                        value={entry.query}
+                        placeholder="Name, SKU, or barcode"
+                        onChange={(event) => updateQuickAddProduct(index, "query", event.target.value)}
+                      />
+                      <span className="pos-settings-field-note">
+                        POS uses this to search products and picks the best match.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      className="pos-quick-add-remove"
+                      onClick={() => removeQuickAddProduct(index)}
+                      aria-label={`Remove quick-add product ${entry.label || index + 1}`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state compact">
+                  No quick-add buttons are configured. Add one to make it appear on POS.
+                </div>
+              )}
+            </div>
+
+            <div className="actions-inline pos-settings-actions">
+              <button
+                type="button"
+                onClick={addQuickAddProduct}
+                disabled={settings.quickAddProducts.length >= 12}
+              >
+                Add quick-add product
+              </button>
+            </div>
           </div>
         </SurfaceCard>
 

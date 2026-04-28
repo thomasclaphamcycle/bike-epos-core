@@ -42,14 +42,6 @@ const LazyCustomerProfilePage = lazy(async () => {
   };
 });
 
-const QUICK_ADD_TILE_DEFINITIONS = [
-  { key: "inner-tube", label: "Inner Tube", query: "Inner Tube" },
-  { key: "chain-lube", label: "Chain Lube", query: "Chain Lube" },
-  { key: "brake-pads", label: "Brake Pads", query: "Brake Pads" },
-  { key: "helmet", label: "Helmet", query: "Helmet" },
-  { key: "floor-pump", label: "Floor Pump", query: "Floor Pump" },
-  { key: "city-bike", label: "City Bike", query: "City Bike" },
-] as const;
 const ACTIVE_BASKET_KEY = "corepos_active_basket_id";
 
 type ProductSearchRow = {
@@ -62,7 +54,8 @@ type ProductSearchRow = {
 };
 
 type QuickAddTile = {
-  key: (typeof QUICK_ADD_TILE_DEFINITIONS)[number]["key"];
+  key: string;
+  testId: string;
   label: string;
   query: string;
   product: ProductSearchRow;
@@ -268,6 +261,16 @@ const resolveHighlightedProductIndex = (
   }
 
   return highlightedIndex >= 0 && highlightedIndex < rows.length ? highlightedIndex : 0;
+};
+
+const toQuickAddKey = (label: string, index: number) => {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || `quick-add-${index + 1}`;
 };
 
 export const PosPage = () => {
@@ -867,16 +870,30 @@ export const PosPage = () => {
     let cancelled = false;
 
     const loadQuickAddTiles = async () => {
+      if (!appConfig.pos.quickAddEnabled || appConfig.pos.quickAddProducts.length === 0) {
+        setQuickAddTiles([]);
+        return;
+      }
+
       try {
         const tiles = await Promise.all(
-          QUICK_ADD_TILE_DEFINITIONS.map(async (definition) => {
+          appConfig.pos.quickAddProducts.map(async (definition, index) => {
             const payload = await apiGet<{ rows: ProductSearchRow[] }>(
               `/api/products/search?q=${encodeURIComponent(definition.query)}&take=6`,
             );
             const rows = payload.rows || [];
             const normalizedQuery = definition.query.toLowerCase();
-            const product = rows.find((row) => row.name.toLowerCase().includes(normalizedQuery)) ?? rows[0] ?? null;
-            return product ? { ...definition, product } : null;
+            const product = rows.find((row) =>
+              row.name.toLowerCase().includes(normalizedQuery)
+                || row.sku.toLowerCase() === normalizedQuery
+                || row.barcode?.toLowerCase() === normalizedQuery,
+            ) ?? rows[0] ?? null;
+
+            const quickAddKey = toQuickAddKey(definition.label, index);
+
+            return product
+              ? { ...definition, key: `${quickAddKey}-${index + 1}`, testId: quickAddKey, product }
+              : null;
           }),
         );
 
@@ -897,7 +914,7 @@ export const PosPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [error]);
+  }, [appConfig.pos.quickAddEnabled, appConfig.pos.quickAddProducts, error]);
 
   useEffect(() => {
     if (!searchText.trim() || searchRows.length === 0) {
@@ -1982,7 +1999,7 @@ export const PosPage = () => {
                           key={tile.key}
                           type="button"
                           className="pos-quick-add-tile"
-                          data-testid={`pos-quick-add-${tile.key}`}
+                          data-testid={`pos-quick-add-${tile.testId}`}
                           onClick={() => void addItem(tile.product.id)}
                           disabled={!canQuickAdd}
                           aria-label={`Quick add ${tile.label}`}
