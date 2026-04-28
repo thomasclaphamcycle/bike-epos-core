@@ -215,7 +215,8 @@ test("Workshop handoff opens the unified POS with context header and grouped bas
 
   await page.getByTestId("workshop-job-open-pos").click();
   await expect(page).toHaveURL(/\/pos\?basketId=/);
-  await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop Job #${job.id}`);
+  await expect(page.getByTestId("pos-context-header")).toContainText("Workshop Sale");
+  await expect(page.getByTestId("pos-context-header")).toContainText(`Job #${job.id}`);
   await expect(page.getByTestId("pos-context-header")).toContainText(`Workshop ${token}`);
   await expect(page.getByTestId("pos-context-header")).toContainText(`Bike ${token}`);
   await expect(page.locator(".pos-group-row")).toContainText(["Labour", "Parts"]);

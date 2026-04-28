@@ -14025,13 +14025,15 @@ body.rota-row-drag-copy-active {
 
 .pos-context-totals div,
 .pos-checkout-summary div,
-.pos-payment-summary div {
+.pos-payment-summary div,
+.pos-payment-summary-customer {
   display: grid;
   gap: 4px;
 }
 
 .pos-context-totals > div,
-.pos-payment-summary > div {
+.pos-payment-summary > div,
+.pos-payment-summary > .pos-payment-summary-customer {
   padding: 7px 9px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.78);
@@ -14044,6 +14046,112 @@ body.rota-row-drag-copy-active {
 .pos-payment-summary strong {
   color: #163147;
   font-size: 0.9rem;
+}
+
+.pos-payment-summary-customer {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.pos-payment-summary-customer:hover,
+.pos-payment-summary-customer:focus-visible {
+  border-color: rgba(74, 127, 172, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(232, 242, 250, 0.92)),
+    radial-gradient(circle at top right, rgba(46, 124, 246, 0.1), transparent 36%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 12px 22px rgba(15, 34, 52, 0.08);
+  transform: translateY(-1px);
+}
+
+.pos-payment-summary-customer:focus-visible {
+  outline: 3px solid rgba(46, 124, 246, 0.22);
+  outline-offset: 2px;
+}
+
+.pos-payment-summary-note {
+  color: #5d7081;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.pos-customer-options-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px;
+  border-radius: 14px;
+  border: 1px solid rgba(172, 190, 207, 0.58);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.82), transparent 36%),
+    linear-gradient(180deg, rgba(248, 251, 253, 0.96), rgba(237, 244, 249, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 12px 22px rgba(15, 34, 52, 0.07);
+}
+
+.pos-customer-option {
+  display: grid;
+  gap: 3px;
+  min-height: 54px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(165, 183, 200, 0.62);
+  background: rgba(255, 255, 255, 0.76);
+  color: #18344b;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.pos-customer-option:hover,
+.pos-customer-option:focus-visible {
+  border-color: rgba(74, 127, 172, 0.78);
+  background: rgba(232, 242, 250, 0.92);
+  box-shadow: 0 10px 18px rgba(15, 34, 52, 0.07);
+}
+
+.pos-customer-option:focus-visible {
+  outline: 3px solid rgba(46, 124, 246, 0.2);
+  outline-offset: 2px;
+}
+
+.pos-customer-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.pos-customer-option span {
+  color: #435d73;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pos-customer-option strong {
+  color: #173247;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.pos-customer-option-active {
+  border-color: rgba(255, 122, 24, 0.56);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 244, 0.98), rgba(255, 238, 223, 0.92)),
+    radial-gradient(circle at top right, rgba(255, 122, 24, 0.14), transparent 36%);
 }
 
 .pos-meta-strip {
@@ -15653,6 +15761,7 @@ body.rota-row-drag-copy-active {
   .pos-search-panel,
   .pos-payment-summary,
   .pos-checkout-summary,
+  .pos-customer-options-panel,
   .pos-cash-grid {
     grid-template-columns: 1fr;
   }

@@ -298,8 +298,8 @@ test("POS customer capture panel resets to ready after removing a captured baske
   await page.getByTestId("pos-customer-clear").click();
 
   await expect(page.getByTestId("pos-selected-customer")).toHaveCount(0);
-  await expect(page.getByText("No customer attached yet. This basket stays as walk-in until you add one.")).toBeVisible();
   await expect(page.locator(".pos-payment-summary")).toContainText("Walk-in");
+  await expect(page.locator(".pos-payment-summary-customer")).toContainText("No profile attached");
   await expect(page.getByTestId("pos-customer-capture-success")).toHaveCount(0);
   await expect(page.getByTestId("pos-customer-capture-completed-state")).toHaveCount(0);
   await expect(page.getByTestId("pos-customer-capture-ready-state")).toBeVisible();
