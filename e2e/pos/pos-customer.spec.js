@@ -133,6 +133,8 @@ test("React POS customer search, attach, change, and checkout preserves final cu
   await expect(page.getByTestId("pos-selected-customer")).toContainText(secondCustomer.name);
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");
 
+  await page.getByTestId("pos-confirm-card-payment").click();
+  await expect(page.getByTestId("pos-complete-sale")).toBeEnabled();
   await page.getByTestId("pos-complete-sale").click();
   await expect(page.getByText("Sale complete.")).toBeVisible();
 

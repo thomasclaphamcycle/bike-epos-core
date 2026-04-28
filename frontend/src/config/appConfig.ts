@@ -36,6 +36,31 @@ export type AppConfig = {
   pos: {
     defaultTaxRatePercent: number;
     barcodeSearchAutoFocus: boolean;
+    defaultSaleType: "RETAIL" | "QUOTE";
+    defaultCustomerType: "WALK_IN" | "PROFILE";
+    newBasketMode: "RETAIL_WALK_IN" | "RETAIL_CUSTOMER" | "QUOTE";
+    requireCustomerBeforeCheckout: boolean;
+    allowZeroPriceLines: boolean;
+    allowNegativeDiscounts: boolean;
+    managerApprovalForDiscounts: boolean;
+    managerApprovalForRefunds: boolean;
+    managerApprovalForVoids: boolean;
+    autoClearBasketAfterSale: boolean;
+    holdBasketTtlHours: number;
+    quoteExpiryDays: number;
+    requireLineNotes: boolean;
+    scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
+    quickAddEnabled: boolean;
+    duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
+    enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
+    splitPaymentsEnabled: boolean;
+    cashRoundingMode: "NONE" | "NEAREST_5P" | "NEAREST_10P";
+    promptForReceiptAfterPayment: boolean;
+    requirePinForCheckout: boolean;
+    requireManagerOverrideForRestrictedActions: boolean;
+    tillLockTimeoutSeconds: number;
+    compactBasketView: boolean;
+    showKeyboardShortcutHints: boolean;
   };
   workshop: {
     defaultJobDurationMinutes: number;
@@ -87,6 +112,31 @@ const DEFAULT_APP_CONFIG: AppConfig = {
   pos: {
     defaultTaxRatePercent: 20,
     barcodeSearchAutoFocus: true,
+    defaultSaleType: "RETAIL",
+    defaultCustomerType: "WALK_IN",
+    newBasketMode: "RETAIL_WALK_IN",
+    requireCustomerBeforeCheckout: false,
+    allowZeroPriceLines: false,
+    allowNegativeDiscounts: false,
+    managerApprovalForDiscounts: true,
+    managerApprovalForRefunds: true,
+    managerApprovalForVoids: true,
+    autoClearBasketAfterSale: true,
+    holdBasketTtlHours: 24,
+    quoteExpiryDays: 30,
+    requireLineNotes: false,
+    scanQuantityMode: "INCREMENT_ONE",
+    quickAddEnabled: true,
+    duplicateScanBehavior: "INCREMENT_QUANTITY",
+    enabledTenderMethods: ["CARD", "CASH"],
+    splitPaymentsEnabled: true,
+    cashRoundingMode: "NONE",
+    promptForReceiptAfterPayment: true,
+    requirePinForCheckout: false,
+    requireManagerOverrideForRestrictedActions: true,
+    tillLockTimeoutSeconds: 300,
+    compactBasketView: false,
+    showKeyboardShortcutHints: true,
   },
   workshop: {
     defaultJobDurationMinutes: 60,

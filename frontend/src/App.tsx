@@ -49,6 +49,7 @@ import {
   OpsHealthPage,
   PinSettingsPage,
   PosPage,
+  PosSettingsPage,
   PricingExceptionsPage,
   ProductDataQueuePage,
   ProductLabelPrintPage,
@@ -643,20 +644,7 @@ const AuthedApp = () => (
         <Route path="/settings/staff-list" element={managerOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
         <Route path="/settings/staff-rota" element={managerOnly(<StaffRotaToolsPage />)} />
-        <Route
-          path="/settings/pos"
-          element={adminOnly(
-            <NavigationPlaceholderPage
-              title="Settings · POS Settings"
-              description="POS behavior defaults and operational controls will expand here while the current persisted settings stay available through Store Info."
-              links={[
-                { label: "Store Info", to: "/settings/store-info" },
-                { label: "Printers", to: "/settings/printers" },
-                { label: "Receipts", to: "/settings/receipts" },
-              ]}
-            />,
-          )}
-        />
+        <Route path="/settings/pos" element={adminOnly(<PosSettingsPage />)} />
         <Route
           path="/settings/inventory"
           element={adminOnly(

@@ -13,6 +13,44 @@ GET {{baseUrl}}/api/config
 X-Staff-Role: STAFF
 X-Staff-Id: demo-staff
 
+### Update POS Settings (ADMIN)
+PATCH {{baseUrl}}/api/settings
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: demo-admin
+
+{
+  "pos": {
+    "defaultTaxRatePercent": 20,
+    "barcodeSearchAutoFocus": true,
+    "defaultSaleType": "RETAIL",
+    "defaultCustomerType": "WALK_IN",
+    "newBasketMode": "RETAIL_WALK_IN",
+    "requireCustomerBeforeCheckout": false,
+    "allowZeroPriceLines": false,
+    "allowNegativeDiscounts": false,
+    "managerApprovalForDiscounts": true,
+    "managerApprovalForRefunds": true,
+    "managerApprovalForVoids": true,
+    "autoClearBasketAfterSale": true,
+    "holdBasketTtlHours": 24,
+    "quoteExpiryDays": 30,
+    "requireLineNotes": false,
+    "scanQuantityMode": "INCREMENT_ONE",
+    "quickAddEnabled": true,
+    "duplicateScanBehavior": "INCREMENT_QUANTITY",
+    "enabledTenderMethods": ["CARD", "CASH", "STORE_CREDIT"],
+    "splitPaymentsEnabled": true,
+    "cashRoundingMode": "NONE",
+    "promptForReceiptAfterPayment": true,
+    "requirePinForCheckout": false,
+    "requireManagerOverrideForRestrictedActions": true,
+    "tillLockTimeoutSeconds": 300,
+    "compactBasketView": false,
+    "showKeyboardShortcutHints": true
+  }
+}
+
 ### Get Store Info (ADMIN)
 GET {{baseUrl}}/api/settings/store-info
 X-Staff-Role: ADMIN
