@@ -8,7 +8,21 @@ Content-Type: application/json
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: staff-1
 
-{}
+{
+  "source": "RETAIL",
+  "sourceRef": null
+}
+
+### Create source-tagged quote basket (STAFF+)
+POST {{baseUrl}}/api/baskets
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: staff-1
+
+{
+  "source": "QUOTE",
+  "sourceRef": "QUOTE-1001"
+}
 
 ### Create basket with preloaded items (STAFF+)
 POST {{baseUrl}}/api/baskets

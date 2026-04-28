@@ -26,7 +26,7 @@ type SalesHistoryRow = {
     name: string;
   };
   reference: string | null;
-  source: "pos" | "workshop" | "online";
+  source: "pos" | "workshop" | "online" | "quote" | "exchange";
 };
 
 type SalesHistoryResponse = {
@@ -114,6 +114,12 @@ const describeSource = (source: SalesHistoryRow["source"]) => {
   }
   if (source === "online") {
     return "Online sale";
+  }
+  if (source === "quote") {
+    return "Quote";
+  }
+  if (source === "exchange") {
+    return "Exchange";
   }
   return "POS sale";
 };

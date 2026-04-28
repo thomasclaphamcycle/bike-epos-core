@@ -1,4 +1,4 @@
-import { BasketStatus, PaymentMethod, Prisma, SaleTenderMethod } from "@prisma/client";
+import { BasketStatus, PaymentMethod, PosSaleSource, Prisma, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
@@ -15,6 +15,7 @@ import {
   recordCashSaleMovementForSaleTx,
   recordCashSaleMovementForPaymentTx,
 } from "./tillService";
+import { buildPosSaleSourceSummary } from "./posSaleSource";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -396,6 +397,17 @@ const toSaleResponse = async (saleId: string) => {
   }
 
   const primaryPayment = sale.payments[0] ?? null;
+  const effectiveSaleSource = sale.source === PosSaleSource.RETAIL && sale.workshopJobId
+    ? PosSaleSource.WORKSHOP
+    : sale.source === PosSaleSource.RETAIL && sale.exchangeFromSaleId
+      ? PosSaleSource.EXCHANGE
+      : sale.source;
+  const effectiveSaleSourceRef = sale.sourceRef
+    ?? (effectiveSaleSource === PosSaleSource.WORKSHOP
+      ? sale.workshopJobId
+      : effectiveSaleSource === PosSaleSource.EXCHANGE
+        ? sale.exchangeFromSaleId
+        : null);
 
   return {
     sale: {
@@ -403,6 +415,7 @@ const toSaleResponse = async (saleId: string) => {
       basketId: sale.basketId,
       exchangeFromSaleId: sale.exchangeFromSaleId,
       locationId: sale.locationId,
+      ...buildPosSaleSourceSummary(effectiveSaleSource, effectiveSaleSourceRef),
       subtotalPence: sale.subtotalPence,
       taxPence: sale.taxPence,
       totalPence: sale.totalPence,
@@ -1047,11 +1060,17 @@ export const checkoutBasketToSale = async (
       let workshopCompletedAt: Date | null = null;
 
       if (workshopJob) {
-        if (!existingSale.workshopJobId) {
+        if (
+          !existingSale.workshopJobId
+          || existingSale.source !== PosSaleSource.WORKSHOP
+          || existingSale.sourceRef !== workshopJob.id
+        ) {
           await tx.sale.update({
             where: { id: existingSale.id },
             data: {
               workshopJobId: workshopJob.id,
+              source: PosSaleSource.WORKSHOP,
+              sourceRef: workshopJob.id,
               ...(existingSale.customerId ? {} : { customerId: workshopJob.customerId }),
             },
           });
@@ -1109,6 +1128,19 @@ export const checkoutBasketToSale = async (
 
       if (existingWorkshopSale) {
         await moveBasketCustomerCaptureSessionsToSaleTx(tx, basket.id, existingWorkshopSale.id);
+
+        if (
+          existingWorkshopSale.source !== PosSaleSource.WORKSHOP
+          || existingWorkshopSale.sourceRef !== workshopJob.id
+        ) {
+          await tx.sale.update({
+            where: { id: existingWorkshopSale.id },
+            data: {
+              source: PosSaleSource.WORKSHOP,
+              sourceRef: workshopJob.id,
+            },
+          });
+        }
 
         await tx.basket.update({
           where: { id: basket.id },
@@ -1188,6 +1220,8 @@ export const checkoutBasketToSale = async (
       data: {
         basketId: basket.id,
         locationId: saleLocation.id,
+        source: workshopJob ? PosSaleSource.WORKSHOP : basket.source,
+        sourceRef: workshopJob ? workshopJob.id : basket.sourceRef,
         ...(workshopJob
           ? {
               workshopJobId: workshopJob.id,
@@ -1397,7 +1431,10 @@ export const createExchangeSale = async (
     }
 
     const basket = await tx.basket.create({
-      data: {},
+      data: {
+        source: PosSaleSource.EXCHANGE,
+        sourceRef: sourceSale.id,
+      },
       select: { id: true },
     });
 
@@ -1422,6 +1459,8 @@ export const createExchangeSale = async (
         basketId: basket.id,
         exchangeFromSaleId: sourceSale.id,
         locationId: saleLocation.id,
+        source: PosSaleSource.EXCHANGE,
+        sourceRef: sourceSale.id,
         subtotalPence,
         taxPence,
         totalPence,

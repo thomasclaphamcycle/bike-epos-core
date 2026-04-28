@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { PosSaleSource } from "@prisma/client";
 import {
   addBasketItem,
   attachCustomerToBasket,
@@ -12,10 +13,13 @@ import { checkoutBasketToSale } from "../services/salesService";
 import { parsePaymentFromBody } from "./salesController";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { resolveRequestLocation } from "../services/locationService";
+import { isPosSaleSource } from "../services/posSaleSource";
 
 export const createBasketHandler = async (_req: Request, res: Response) => {
   const body = ((_req.body ?? {}) as {
     customerId?: unknown;
+    source?: unknown;
+    sourceRef?: unknown;
     items?: Array<{
       variantId?: unknown;
       quantity?: unknown;
@@ -32,6 +36,16 @@ export const createBasketHandler = async (_req: Request, res: Response) => {
     && typeof body.customerId !== "string"
   ) {
     throw new HttpError(400, "customerId must be a uuid or null", "INVALID_CUSTOMER_ID");
+  }
+  if (body.source !== undefined && !isPosSaleSource(body.source)) {
+    throw new HttpError(400, "source must be a valid POS sale source", "INVALID_POS_SALE_SOURCE");
+  }
+  if (
+    body.sourceRef !== undefined
+    && body.sourceRef !== null
+    && typeof body.sourceRef !== "string"
+  ) {
+    throw new HttpError(400, "sourceRef must be a string or null", "INVALID_POS_SALE_SOURCE_REF");
   }
 
   const items = body.items?.map((item) => {
@@ -58,6 +72,8 @@ export const createBasketHandler = async (_req: Request, res: Response) => {
   const basket = await createBasket({
     ...(items ? { items } : {}),
     ...(body.customerId !== undefined ? { customerId: body.customerId } : {}),
+    ...(body.source !== undefined ? { source: body.source as PosSaleSource } : {}),
+    ...(body.sourceRef !== undefined ? { sourceRef: body.sourceRef ?? null } : {}),
   });
   res.status(201).json(basket);
 };

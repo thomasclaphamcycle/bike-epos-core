@@ -367,6 +367,9 @@ const run = async () => {
     });
     assert.equal(finalizeRes.status, 201, JSON.stringify(finalizeRes.json));
     assert.ok(finalizeRes.json.basket?.id, "Expected basket id after finalize");
+    assert.equal(finalizeRes.json.basket.source, "WORKSHOP");
+    assert.equal(finalizeRes.json.basket.sourceRef, workshopJobId);
+    assert.equal(finalizeRes.json.basket.sourceLabel, "Workshop Sale");
     state.basketIds.add(finalizeRes.json.basket.id);
     assert.ok(
       Array.isArray(finalizeRes.json.basket.items) && finalizeRes.json.basket.items.length >= 2,
@@ -427,10 +430,14 @@ const run = async () => {
         id: true,
         basketId: true,
         workshopJobId: true,
+        source: true,
+        sourceRef: true,
       },
     });
     assert.equal(linkedSale?.basketId, finalizeRes.json.basket.id);
     assert.equal(linkedSale?.workshopJobId, workshopJobId);
+    assert.equal(linkedSale?.source, "WORKSHOP");
+    assert.equal(linkedSale?.sourceRef, workshopJobId);
 
     const stockAfterCheckoutRes = await fetchJson(
       `/api/stock/variants/${encodeURIComponent(variantRes.json.id)}`,

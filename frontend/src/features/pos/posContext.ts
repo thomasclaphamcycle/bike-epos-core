@@ -1,7 +1,10 @@
 import { useNavigate, type NavigateOptions } from "react-router-dom";
 
 export type SaleContext =
-  | { type: "RETAIL" }
+  | { type: "RETAIL"; sourceRef?: string | null }
+  | { type: "QUOTE"; sourceRef?: string | null }
+  | { type: "WEB"; sourceRef?: string | null }
+  | { type: "EXCHANGE"; sourceRef?: string | null }
   | {
       type: "WORKSHOP";
       jobId: string;
@@ -9,6 +12,22 @@ export type SaleContext =
       bikeLabel?: string;
       depositPaidPence?: number;
     };
+
+export type PosSaleSource = SaleContext["type"];
+
+const POS_SALE_SOURCE_LABELS: Record<PosSaleSource, string> = {
+  RETAIL: "Retail Sale",
+  QUOTE: "Quote",
+  WEB: "Web Sale",
+  WORKSHOP: "Workshop Sale",
+  EXCHANGE: "Exchange",
+};
+
+export const getPosSaleSourceLabel = (source: PosSaleSource) =>
+  POS_SALE_SOURCE_LABELS[source] ?? POS_SALE_SOURCE_LABELS.RETAIL;
+
+export const getSaleContextSourceRef = (context: SaleContext) =>
+  context.type === "WORKSHOP" ? context.jobId : context.sourceRef ?? null;
 
 export type PosLineItemType = "PART" | "LABOUR";
 
