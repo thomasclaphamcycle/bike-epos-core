@@ -421,8 +421,17 @@ const buildEBikeSummary = (bike: CustomerBikeRecord) => {
 const requiresMileageRefresh = (schedule: BikeServiceScheduleRecord) =>
   schedule.intervalMileage !== null || schedule.nextDueMileage !== null;
 
-export const CustomerProfilePage = () => {
-  const { id } = useParams<{ id: string }>();
+type CustomerProfilePageProps = {
+  customerId?: string;
+  embedded?: boolean;
+};
+
+export const CustomerProfilePage = ({
+  customerId: customerIdOverride,
+  embedded = false,
+}: CustomerProfilePageProps = {}) => {
+  const { id: routeCustomerId } = useParams<{ id: string }>();
+  const id = customerIdOverride ?? routeCustomerId;
   const { success, error } = useToasts();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -931,11 +940,11 @@ export const CustomerProfilePage = () => {
   }
 
   return (
-    <div className="page-shell">
+    <div className={`page-shell${embedded ? " customer-profile-page-shell customer-profile-page-shell--embedded" : " customer-profile-page-shell"}`}>
       <section className="card">
         <div className="card-header-row">
           <h1>Customer Profile</h1>
-          <Link to="/customers">Back to Customers</Link>
+          {!embedded ? <Link to="/customers">Back to Customers</Link> : null}
         </div>
 
         {loading ? <p>Loading...</p> : null}

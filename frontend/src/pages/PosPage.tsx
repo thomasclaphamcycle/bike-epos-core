@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
@@ -31,6 +31,13 @@ import { toBackendUrl } from "../utils/backendUrl";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
 const ACTIVE_SALE_KEY = "corepos.activeSaleId";
+const LazyCustomerProfilePage = lazy(async () => {
+  const mod = await import("./CustomerProfilePage");
+  return {
+    default: mod.CustomerProfilePage,
+  };
+});
+
 const QUICK_ADD_TILE_DEFINITIONS = [
   { key: "inner-tube", label: "Inner Tube", query: "Inner Tube" },
   { key: "chain-lube", label: "Chain Lube", query: "Chain Lube" },
@@ -235,6 +242,7 @@ export const PosPage = () => {
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
   const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
+  const [customerProfileModalOpen, setCustomerProfileModalOpen] = useState(false);
   const [contextCustomerId, setContextCustomerId] = useState<string | null>(null);
   const [customerLoading, setCustomerLoading] = useState(false);
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
@@ -286,6 +294,29 @@ export const PosPage = () => {
   useEffect(() => {
     selectedCustomerStateRef.current = selectedCustomer;
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!selectedCustomer?.id && customerProfileModalOpen) {
+      setCustomerProfileModalOpen(false);
+    }
+  }, [customerProfileModalOpen, selectedCustomer?.id]);
+
+  useEffect(() => {
+    if (!customerProfileModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCustomerProfileModalOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customerProfileModalOpen]);
 
   const beginPosLifecycleRequest = () => {
     posLifecycleRequestIdRef.current += 1;
@@ -985,6 +1016,14 @@ export const PosPage = () => {
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
     setShowCreateCustomer(false);
+  };
+
+  const openCustomerProfileModal = () => {
+    if (!selectedCustomer?.id) {
+      return;
+    }
+
+    setCustomerProfileModalOpen(true);
   };
 
   const createCustomerAndSelect = async () => {
@@ -1853,19 +1892,36 @@ export const PosPage = () => {
               </div>
 
               {selectedCustomer ? (
-                <div className="selected-customer-panel" data-testid="pos-selected-customer">
-                  <div>
+                <div
+                  className="selected-customer-panel selected-customer-panel--interactive"
+                  data-testid="pos-selected-customer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open full customer profile for ${selectedCustomer.name}`}
+                  onClick={openCustomerProfileModal}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openCustomerProfileModal();
+                    }
+                  }}
+                >
+                  <div className="selected-customer-panel__summary">
                     <div className="table-primary">{selectedCustomer.name}</div>
                     <div className="muted-text">
                       {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
                     </div>
+                    <div className="selected-customer-panel__hint">Tap for full profile</div>
                   </div>
-                  <div className="customer-status-chip">
-                    {selectedCustomerAttachedToSale
-                      ? "Attached to sale"
-                      : selectedCustomerAttachedToBasket
-                        ? "Attached to basket"
-                        : "Selected for checkout"}
+                  <div className="selected-customer-panel__meta">
+                    <div className="customer-status-chip">
+                      {selectedCustomerAttachedToSale
+                        ? "Attached to sale"
+                        : selectedCustomerAttachedToBasket
+                          ? "Attached to basket"
+                          : "Selected for checkout"}
+                    </div>
+                    <span className="selected-customer-panel__action">View details</span>
                   </div>
                 </div>
               ) : (
@@ -2249,6 +2305,46 @@ export const PosPage = () => {
           </div>
         </div>
       </section>
+
+      {customerProfileModalOpen && selectedCustomer?.id ? (
+        <div
+          className="customer-profile-overlay"
+          role="presentation"
+          onClick={() => setCustomerProfileModalOpen(false)}
+        >
+          <div
+            className="customer-profile-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Customer profile for ${selectedCustomer.name}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="customer-profile-modal__header">
+              <div>
+                <strong>Customer Profile</strong>
+                <div className="muted-text">{selectedCustomer.name}</div>
+              </div>
+              <div className="actions-inline">
+                <Link
+                  to={`/customers/${encodeURIComponent(selectedCustomer.id)}`}
+                  className="button-link"
+                  onClick={() => setCustomerProfileModalOpen(false)}
+                >
+                  Open page
+                </Link>
+                <button type="button" onClick={() => setCustomerProfileModalOpen(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="customer-profile-modal__content">
+              <Suspense fallback={<p className="muted-text">Loading customer profile...</p>}>
+                <LazyCustomerProfilePage customerId={selectedCustomer.id} embedded />
+              </Suspense>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -4,10 +4,13 @@ import {
   getCustomerCapturePublicPageErrorMessage,
   getPublicCustomerCaptureStationEntry,
   getPublicSaleCustomerCaptureSession,
+  previewPublicSaleCustomerCaptureMatch,
   submitPublicSaleCustomerCapture,
+  type PublicCustomerCaptureMatchPreviewResponse,
   type PublicCustomerCaptureSessionState,
   type PublicCustomerCaptureSubmitResponse,
 } from "../features/customerCapture/customerCapture";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 
 type CaptureFormState = {
   firstName: string;
@@ -23,12 +26,26 @@ const defaultFormState: CaptureFormState = {
   phone: "",
 };
 
+type MatchPreview = PublicCustomerCaptureMatchPreviewResponse["preview"];
+
 const getFriendlySubmitError = (error: unknown) =>
   getCustomerCapturePublicPageErrorMessage(error) || "We could not save your details. Please try again.";
 
 const getCaptureContextLabel = (ownerType: "sale" | "basket") => (
   ownerType === "sale" ? "sale" : "basket"
 );
+
+const getExistingMatchConfirmationLabel = (preview: MatchPreview) => {
+  if (preview.conflictingMatch) {
+    return "Use the existing customer linked by email";
+  }
+
+  if (preview.matchType === "email") {
+    return "Use the existing customer linked by this email address";
+  }
+
+  return "Use the existing customer linked by this phone number";
+};
 
 export const CustomerCapturePage = () => {
   const { token: routeToken, station: routeStation } = useParams();
@@ -54,6 +71,12 @@ export const CustomerCapturePage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<PublicCustomerCaptureSubmitResponse | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [matchPreview, setMatchPreview] = useState<MatchPreview | null>(null);
+  const [matchPreviewLoading, setMatchPreviewLoading] = useState(false);
+  const [matchPreviewError, setMatchPreviewError] = useState<string | null>(null);
+  const [useExistingCustomerConfirmed, setUseExistingCustomerConfirmed] = useState(false);
+  const debouncedEmail = useDebouncedValue(form.email.trim(), 250);
+  const debouncedPhone = useDebouncedValue(form.phone.trim(), 250);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +151,54 @@ export const CustomerCapturePage = () => {
     };
   }, [navigate, reloadNonce, station, token]);
 
+  useEffect(() => {
+    if (result || !token || session?.status !== "ACTIVE") {
+      setMatchPreview(null);
+      setMatchPreviewLoading(false);
+      setMatchPreviewError(null);
+      return undefined;
+    }
+
+    if (!debouncedEmail && !debouncedPhone) {
+      setMatchPreview(null);
+      setMatchPreviewLoading(false);
+      setMatchPreviewError(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setMatchPreviewLoading(true);
+    setMatchPreviewError(null);
+
+    void previewPublicSaleCustomerCaptureMatch(token, {
+      ...(debouncedEmail ? { email: debouncedEmail } : {}),
+      ...(debouncedPhone ? { phone: debouncedPhone } : {}),
+    })
+      .then((payload) => {
+        if (!cancelled) {
+          setMatchPreview(payload.preview);
+        }
+      })
+      .catch((previewError) => {
+        if (!cancelled) {
+          setMatchPreview(null);
+          setMatchPreviewError(
+            getCustomerCapturePublicPageErrorMessage(previewError)
+            || "We could not check whether these details match an existing customer.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMatchPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedEmail, debouncedPhone, result, session?.status, token]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!token) {
@@ -136,6 +207,20 @@ export const CustomerCapturePage = () => {
 
     if (!form.firstName.trim() || !form.lastName.trim() || (!form.email.trim() && !form.phone.trim())) {
       setSubmitError("Enter first name, last name, and at least one contact method.");
+      return;
+    }
+
+    if (matchPreviewLoading) {
+      setSubmitError("Checking whether these details already belong to an existing customer.");
+      return;
+    }
+
+    if (matchPreview?.willUseExistingCustomer && !useExistingCustomerConfirmed) {
+      setSubmitError(
+        matchPreview.conflictingMatch
+          ? "Confirm that the existing email-linked customer should be used before continuing."
+          : "Confirm that the existing customer should be used before continuing.",
+      );
       return;
     }
 
@@ -167,6 +252,7 @@ export const CustomerCapturePage = () => {
   const isReplaced = session?.status === "EXPIRED" && session.isReplaced;
   const isWaitingForEntrySession = !token;
   const contextLabel = getCaptureContextLabel(result?.session.ownerType ?? session?.ownerType ?? "sale");
+  const existingMatchNeedsConfirmation = Boolean(matchPreview?.willUseExistingCustomer);
   const startedAtLabel = session?.createdAt
     ? new Date(session.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : null;
@@ -232,7 +318,7 @@ export const CustomerCapturePage = () => {
             <p className="muted-text">
               {result.matchType === "created"
                 ? "A new customer profile was created."
-                : `Your details matched an existing customer by ${result.matchType}.`}
+                : `We used the existing customer record matched by ${result.matchType}. Existing saved details stay in place and this form does not overwrite that record.`}
             </p>
           </div>
         ) : null}
@@ -292,7 +378,11 @@ export const CustomerCapturePage = () => {
                 <input
                   data-testid="customer-capture-first-name"
                   value={form.firstName}
-                  onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, firstName: event.target.value }));
+                    setUseExistingCustomerConfirmed(false);
+                    setSubmitError(null);
+                  }}
                   autoComplete="given-name"
                   placeholder="Alex"
                   autoFocus
@@ -305,7 +395,11 @@ export const CustomerCapturePage = () => {
                 <input
                   data-testid="customer-capture-last-name"
                   value={form.lastName}
-                  onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, lastName: event.target.value }));
+                    setUseExistingCustomerConfirmed(false);
+                    setSubmitError(null);
+                  }}
                   autoComplete="family-name"
                   placeholder="Taylor"
                   disabled={submitting}
@@ -318,7 +412,11 @@ export const CustomerCapturePage = () => {
                   data-testid="customer-capture-email"
                   type="email"
                   value={form.email}
-                  onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, email: event.target.value }));
+                    setUseExistingCustomerConfirmed(false);
+                    setSubmitError(null);
+                  }}
                   autoComplete="email"
                   placeholder="name@example.com"
                   disabled={submitting}
@@ -329,7 +427,11 @@ export const CustomerCapturePage = () => {
                 <input
                   data-testid="customer-capture-phone"
                   value={form.phone}
-                  onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                  onChange={(event) => {
+                    setForm((current) => ({ ...current, phone: event.target.value }));
+                    setUseExistingCustomerConfirmed(false);
+                    setSubmitError(null);
+                  }}
                   autoComplete="tel"
                   inputMode="tel"
                   placeholder="07..."
@@ -339,13 +441,87 @@ export const CustomerCapturePage = () => {
             </div>
 
             <p className="muted-text">
-              Enter your first and last name, plus either email or phone. Accurate details make checkout and follow-up faster.
+              Enter your first and last name, plus either email or phone. Matching checks email first, then phone. If either already belongs to an existing customer, CorePOS will attach that existing record instead of overwriting it.
             </p>
+
+            {matchPreviewLoading ? (
+              <div className="quick-create-panel customer-capture-state-card customer-capture-preview-card">
+                <strong>Checking existing customer details</strong>
+                <p className="muted-text">
+                  CorePOS is checking whether this email or phone already belongs to an existing customer.
+                </p>
+              </div>
+            ) : null}
+
+            {!matchPreviewLoading && matchPreview ? (
+              <div
+                className={
+                  matchPreview.willUseExistingCustomer
+                    ? "quick-create-panel customer-capture-state-card customer-capture-preview-card customer-capture-preview-card--warning"
+                    : "quick-create-panel customer-capture-state-card customer-capture-preview-card customer-capture-preview-card--ready"
+                }
+              >
+                {matchPreview.willUseExistingCustomer ? (
+                  <>
+                    <strong>
+                      {matchPreview.matchType === "email"
+                        ? "Existing customer found by email"
+                        : "Existing customer found by phone"}
+                    </strong>
+                    <p className="muted-text">
+                      Saving will attach the existing customer record and keep its saved details. The name, email, and phone entered here do not overwrite that record.
+                    </p>
+                    <p className="muted-text">
+                      {matchPreview.conflictingMatch
+                        ? "Both email and phone already belong to existing customers. Email takes priority and will be used if you continue."
+                        : matchPreview.matchType === "email"
+                          ? "Email takes priority over phone when both are present."
+                          : "Phone will be used because no existing customer matched this email."}
+                    </p>
+                    <label className="customer-capture-confirmation">
+                      <input
+                        type="checkbox"
+                        checked={useExistingCustomerConfirmed}
+                        onChange={(event) => {
+                          setUseExistingCustomerConfirmed(event.target.checked);
+                          setSubmitError(null);
+                        }}
+                        disabled={submitting}
+                      />
+                      <span>{getExistingMatchConfirmationLabel(matchPreview)}</span>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <strong>New customer will be created</strong>
+                    <p className="muted-text">
+                      No existing customer currently matches these contact details. Saving will create a new customer record for this {contextLabel}.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {!matchPreviewLoading && matchPreviewError ? (
+              <p className="muted-text customer-capture-preview-error">{matchPreviewError}</p>
+            ) : null}
 
             {submitError ? <p className="customer-capture-error">{submitError}</p> : null}
 
-            <button type="submit" className="primary" disabled={submitting}>
-              {submitting ? "Saving details..." : "Save details"}
+            <button
+              type="submit"
+              className="primary"
+              disabled={
+                submitting
+                || matchPreviewLoading
+                || (existingMatchNeedsConfirmation && !useExistingCustomerConfirmed)
+              }
+            >
+              {submitting
+                ? "Saving details..."
+                : existingMatchNeedsConfirmation
+                  ? "Use existing customer"
+                  : "Save details"}
             </button>
           </form>
         ) : null}

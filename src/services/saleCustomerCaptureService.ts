@@ -24,6 +24,11 @@ type SubmitSaleCustomerCaptureInput = {
   smsMarketingConsent?: boolean;
 };
 
+type PreviewSaleCustomerCaptureMatchInput = {
+  email?: string;
+  phone?: string;
+};
+
 type CaptureSessionRecord = {
   id: string;
   saleId: string | null;
@@ -430,26 +435,43 @@ const findMatchingCustomerTx = async (
     phone?: string;
   },
 ) => {
-  if (input.email) {
-    const emailMatch = await tx.customer.findUnique({
-      where: { email: input.email },
-    });
-    if (emailMatch) {
-      return { customer: emailMatch, matchType: "email" as const };
-    }
+  const matches = await findExistingCustomerMatchesTx(tx, input);
+  if (matches.emailMatch) {
+    return { customer: matches.emailMatch, matchType: "email" as const };
   }
 
-  if (input.phone) {
-    const phoneMatch = await tx.customer.findFirst({
-      where: { phone: input.phone },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    });
-    if (phoneMatch) {
-      return { customer: phoneMatch, matchType: "phone" as const };
-    }
+  if (matches.phoneMatch) {
+    return { customer: matches.phoneMatch, matchType: "phone" as const };
   }
 
   return null;
+};
+
+const findExistingCustomerMatchesTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    email?: string;
+    phone?: string;
+  },
+) => {
+  const [emailMatch, phoneMatch] = await Promise.all([
+    input.email
+      ? tx.customer.findUnique({
+          where: { email: input.email },
+        })
+      : Promise.resolve(null),
+    input.phone
+      ? tx.customer.findFirst({
+          where: { phone: input.phone },
+          orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    emailMatch,
+    phoneMatch,
+  };
 };
 
 const findOrCreateCustomerTx = async (
@@ -922,6 +944,59 @@ export const submitPublicSaleCustomerCapture = async (
           }
         : null,
       matchType,
+    };
+  });
+};
+
+export const previewPublicSaleCustomerCaptureMatch = async (
+  token: string,
+  input: PreviewSaleCustomerCaptureMatchInput,
+) => {
+  const email = normalizeEmail(input.email);
+  const phone = normalizePhone(input.phone);
+
+  if (!email && !phone) {
+    throw new HttpError(
+      400,
+      "At least one contact method is required",
+      "INVALID_CUSTOMER_CAPTURE",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const session = await getSessionByTokenOrThrowTx(tx, token);
+    await assertSubmittableSessionOrAuditTx(tx, session);
+
+    const matches = await findExistingCustomerMatchesTx(tx, {
+      email,
+      phone,
+    });
+    const emailMatched = Boolean(matches.emailMatch);
+    const phoneMatched = Boolean(matches.phoneMatch);
+    const conflictingMatch = Boolean(
+      matches.emailMatch
+      && matches.phoneMatch
+      && matches.emailMatch.id !== matches.phoneMatch.id,
+    );
+
+    const matchType: CustomerMatchType = emailMatched
+      ? "email"
+      : phoneMatched
+        ? "phone"
+        : "created";
+
+    return {
+      preview: {
+        matchType,
+        willUseExistingCustomer: matchType !== "created",
+        existingDetailsRetained: matchType !== "created",
+        emailProvided: Boolean(email),
+        phoneProvided: Boolean(phone),
+        emailMatched,
+        phoneMatched,
+        conflictingMatch,
+        precedence: ["email", "phone"] as const,
+      },
     };
   });
 };

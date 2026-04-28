@@ -700,8 +700,37 @@ const run = async () => {
     assert.equal(completedRetry.status, 409);
     assert.equal(completedRetry.payload.error.code, "CUSTOMER_CAPTURE_COMPLETED");
 
+    const createdPreviewSale = await createSale(created, location.id);
+    const createdPreviewSession = await createCaptureSession(created, createdPreviewSale.id);
+    const createdPreview = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(createdPreviewSession.session.token)}/preview`,
+      method: "POST",
+      body: {
+        email: `preview-created-${token}@example.com`,
+        phone: `07001${token.slice(-6)}`,
+      },
+    });
+    assert.equal(createdPreview.preview.matchType, "created");
+    assert.equal(createdPreview.preview.willUseExistingCustomer, false);
+    assert.equal(createdPreview.preview.emailMatched, false);
+    assert.equal(createdPreview.preview.phoneMatched, false);
+    assert.equal(createdPreview.preview.conflictingMatch, false);
+
     const emailPrioritySale = await createSale(created, location.id);
     const emailPrioritySession = await createCaptureSession(created, emailPrioritySale.id);
+    const emailPriorityPreview = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(emailPrioritySession.session.token)}/preview`,
+      method: "POST",
+      body: {
+        email: emailMatchCustomer.email,
+        phone: phoneMatchCustomer.phone,
+      },
+    });
+    assert.equal(emailPriorityPreview.preview.matchType, "email");
+    assert.equal(emailPriorityPreview.preview.willUseExistingCustomer, true);
+    assert.equal(emailPriorityPreview.preview.emailMatched, true);
+    assert.equal(emailPriorityPreview.preview.phoneMatched, true);
+    assert.equal(emailPriorityPreview.preview.conflictingMatch, true);
     const emailPrioritySubmit = await apiJsonOrThrow({
       path: `/api/public/customer-capture/${encodeURIComponent(emailPrioritySession.session.token)}`,
       method: "POST",
@@ -717,6 +746,18 @@ const run = async () => {
 
     const phonePrioritySale = await createSale(created, location.id);
     const phonePrioritySession = await createCaptureSession(created, phonePrioritySale.id);
+    const phonePriorityPreview = await apiJsonOrThrow({
+      path: `/api/public/customer-capture/${encodeURIComponent(phonePrioritySession.session.token)}/preview`,
+      method: "POST",
+      body: {
+        phone: phoneMatchCustomer.phone,
+      },
+    });
+    assert.equal(phonePriorityPreview.preview.matchType, "phone");
+    assert.equal(phonePriorityPreview.preview.willUseExistingCustomer, true);
+    assert.equal(phonePriorityPreview.preview.emailMatched, false);
+    assert.equal(phonePriorityPreview.preview.phoneMatched, true);
+    assert.equal(phonePriorityPreview.preview.conflictingMatch, false);
     const phonePrioritySubmit = await apiJsonOrThrow({
       path: `/api/public/customer-capture/${encodeURIComponent(phonePrioritySession.session.token)}`,
       method: "POST",
