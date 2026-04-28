@@ -42,6 +42,15 @@ GET {{baseUrl}}/api/public/customer-capture/{{token}}
 ### Resolve the current live customer capture session for a static NFC tap point
 GET {{baseUrl}}/api/public/customer-capture/entry/{{station}}
 
+### Preview whether the public capture details will match an existing customer
+POST {{baseUrl}}/api/public/customer-capture/{{token}}/preview
+Content-Type: application/json
+
+{
+  "email": "jamie.rider@example.com",
+  "phone": "07123456789"
+}
+
 ### Submit public customer capture details
 POST {{baseUrl}}/api/public/customer-capture/{{token}}
 Content-Type: application/json

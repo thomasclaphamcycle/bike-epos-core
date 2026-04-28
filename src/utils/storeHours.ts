@@ -91,6 +91,95 @@ export const formatDateKeyInTimeZone = (value: Date, timeZone: string) => {
   return `${year}-${month}-${day}`;
 };
 
+const getDateTimePartsInTimeZone = (value: Date, timeZone: string) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+
+  const lookup = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    year: Number(lookup("year") || "0"),
+    month: Number(lookup("month") || "0"),
+    day: Number(lookup("day") || "0"),
+    hour: Number(lookup("hour") || "0"),
+    minute: Number(lookup("minute") || "0"),
+    second: Number(lookup("second") || "0"),
+  };
+};
+
+const ISO_LOCAL_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+const ISO_TIME_ZONE_SUFFIX_PATTERN = /(Z|[+\-]\d{2}(?::?\d{2})?)$/i;
+
+export const parseDateTimeInTimeZone = (value: string, timeZone: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (ISO_TIME_ZONE_SUFFIX_PATTERN.test(trimmed)) {
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const match = ISO_LOCAL_DATE_TIME_PATTERN.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? "0");
+  const targetUtcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  let candidate = new Date(targetUtcMs);
+
+  // Align a store-local wall-clock input to a stable UTC instant.
+  for (let index = 0; index < 4; index += 1) {
+    const parts = getDateTimePartsInTimeZone(candidate, timeZone);
+    const renderedUtcMs = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    const diffMs = targetUtcMs - renderedUtcMs;
+
+    if (diffMs === 0) {
+      break;
+    }
+
+    candidate = new Date(candidate.getTime() + diffMs);
+  }
+
+  const resolved = getDateTimePartsInTimeZone(candidate, timeZone);
+  if (
+    resolved.year !== year ||
+    resolved.month !== month ||
+    resolved.day !== day ||
+    resolved.hour !== hour ||
+    resolved.minute !== minute ||
+    resolved.second !== second
+  ) {
+    return null;
+  }
+
+  return candidate;
+};
+
 export const getStoreWeekdayKeyForDate = (value: Date, timeZone: string): StoreWeekdayKey => {
   const weekday = new Intl.DateTimeFormat("en-GB", {
     timeZone,

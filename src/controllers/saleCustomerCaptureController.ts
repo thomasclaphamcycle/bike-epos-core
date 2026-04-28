@@ -7,6 +7,7 @@ import {
   getCurrentBasketCustomerCaptureSession,
   getPublicCustomerCaptureStationEntry,
   getCurrentSaleCustomerCaptureSession,
+  previewPublicSaleCustomerCaptureMatch,
   getPublicSaleCustomerCaptureSession,
   submitPublicSaleCustomerCapture,
 } from "../services/saleCustomerCaptureService";
@@ -56,6 +57,29 @@ export const getPublicSaleCustomerCaptureSessionHandler = async (req: Request, r
 
 export const getPublicCustomerCaptureStationEntryHandler = async (req: Request, res: Response) => {
   const result = await getPublicCustomerCaptureStationEntry(req.params.station);
+  res.json(result);
+};
+
+export const previewPublicSaleCustomerCaptureMatchHandler = async (
+  req: Request,
+  res: Response,
+) => {
+  const body = (req.body ?? {}) as {
+    email?: unknown;
+    phone?: unknown;
+  };
+
+  if (body.email !== undefined && typeof body.email !== "string") {
+    throw new HttpError(400, "email must be a string", "INVALID_CUSTOMER_CAPTURE");
+  }
+  if (body.phone !== undefined && typeof body.phone !== "string") {
+    throw new HttpError(400, "phone must be a string", "INVALID_CUSTOMER_CAPTURE");
+  }
+
+  const result = await previewPublicSaleCustomerCaptureMatch(req.params.token, {
+    email: body.email,
+    phone: body.phone,
+  });
   res.json(result);
 };
 

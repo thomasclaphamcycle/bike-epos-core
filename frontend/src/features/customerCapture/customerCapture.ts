@@ -91,6 +91,20 @@ export type PublicCustomerCaptureSubmitResponse = {
   matchType: "email" | "phone" | "created";
 };
 
+export type PublicCustomerCaptureMatchPreviewResponse = {
+  preview: {
+    matchType: "email" | "phone" | "created";
+    willUseExistingCustomer: boolean;
+    existingDetailsRetained: boolean;
+    emailProvided: boolean;
+    phoneProvided: boolean;
+    emailMatched: boolean;
+    phoneMatched: boolean;
+    conflictingMatch: boolean;
+    precedence: Array<"email" | "phone">;
+  };
+};
+
 export const getPublicAppOrigin = () => {
   const configuredOrigin = import.meta.env.VITE_PUBLIC_APP_ORIGIN?.trim();
   if (configuredOrigin) {
@@ -158,6 +172,18 @@ export const submitPublicSaleCustomerCapture = (
 ) =>
   apiPost<PublicCustomerCaptureSubmitResponse>(
     `/api/public/customer-capture/${encodeURIComponent(token)}`,
+    body,
+  );
+
+export const previewPublicSaleCustomerCaptureMatch = (
+  token: string,
+  body: {
+    email?: string;
+    phone?: string;
+  },
+) =>
+  apiPost<PublicCustomerCaptureMatchPreviewResponse>(
+    `/api/public/customer-capture/${encodeURIComponent(token)}/preview`,
     body,
   );
 

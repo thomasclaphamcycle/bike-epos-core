@@ -403,7 +403,7 @@ test("POS customer capture shows matched-by-email outcome for existing customers
   await capturePage.getByTestId("customer-capture-email").fill(existingCustomer.email);
   await capturePage.getByTestId("customer-capture-phone").fill("07000000000");
   await capturePage.getByRole("button", { name: "Save details" }).click();
-  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("matched an existing customer by email");
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("used the existing customer record matched by email");
 
   await expect.poll(async () => {
     const chip = page.getByTestId("pos-selected-customer");
@@ -456,7 +456,7 @@ test("POS customer capture shows matched-by-phone outcome for existing customers
   await capturePage.getByTestId("customer-capture-email").fill(`fresh-${token}@example.com`);
   await capturePage.getByTestId("customer-capture-phone").fill(existingPhone);
   await capturePage.getByRole("button", { name: "Save details" }).click();
-  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("matched an existing customer by phone");
+  await expect(capturePage.getByTestId("customer-capture-success")).toContainText("used the existing customer record matched by phone");
 
   await expect.poll(async () => {
     const chip = page.getByTestId("pos-selected-customer");

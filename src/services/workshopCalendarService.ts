@@ -9,6 +9,7 @@ import {
   clockTimeToMinutes,
   formatDateKeyInTimeZone,
   getStoreWeekdayKeyForDate,
+  parseDateTimeInTimeZone,
 } from "../utils/storeHours";
 import { filterWorkshopTechnicians } from "./workshopStaffingService";
 
@@ -439,6 +440,7 @@ const parseCalendarDateRange = (input: { from: string; to: string }) => {
 const parseScheduledDateTime = (
   value: ScheduleInputValue,
   field: "scheduledStartAt" | "scheduledEndAt",
+  timeZone: string,
 ) => {
   if (value === undefined) {
     return undefined;
@@ -448,8 +450,8 @@ const parseScheduledDateTime = (
     return null;
   }
 
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = value instanceof Date ? value : parseDateTimeInTimeZone(value, timeZone);
+  if (!date || Number.isNaN(date.getTime())) {
     throw new HttpError(
       400,
       `${field} must be a valid ISO date-time`,
@@ -490,8 +492,17 @@ export const resolveWorkshopSchedulePatch = async (
   },
   db: WorkshopCalendarClient = prisma,
 ): Promise<{ hasScheduleChanges: boolean; schedule: WorkshopScheduleSnapshot }> => {
-  const parsedStart = parseScheduledDateTime(input.scheduledStartAt, "scheduledStartAt");
-  const parsedEnd = parseScheduledDateTime(input.scheduledEndAt, "scheduledEndAt");
+  const settings = await listShopSettings(db);
+  const parsedStart = parseScheduledDateTime(
+    input.scheduledStartAt,
+    "scheduledStartAt",
+    settings.store.timeZone,
+  );
+  const parsedEnd = parseScheduledDateTime(
+    input.scheduledEndAt,
+    "scheduledEndAt",
+    settings.store.timeZone,
+  );
   const parsedDuration = parseDurationMinutes(input.durationMinutes);
   const clearSchedule = input.clearSchedule === true;
   const hasScheduleChanges =
@@ -617,7 +628,6 @@ export const resolveWorkshopSchedulePatch = async (
     );
   }
 
-  const settings = await listShopSettings(db);
   const startDateKey = formatDateKeyInTimeZone(scheduledStartAt, settings.store.timeZone);
   const endDateKey = formatDateKeyInTimeZone(scheduledEndAt, settings.store.timeZone);
 
