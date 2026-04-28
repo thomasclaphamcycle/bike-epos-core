@@ -13915,10 +13915,12 @@ body.rota-row-drag-copy-active {
 }
 
 .pos-topbar-copy h1 {
-  font-size: 1.4rem;
+  font-size: 0.74rem;
   line-height: 1;
-  letter-spacing: 0.01em;
-  color: #11293b;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #5b7287;
+  font-weight: 900;
 }
 
 .pos-kicker,
@@ -14057,9 +14059,11 @@ body.rota-row-drag-copy-active {
 }
 
 .pos-context-title {
-  font-size: clamp(0.98rem, 1.3vw, 1.18rem);
+  font-size: clamp(1.18rem, 1.7vw, 1.45rem);
   line-height: 1.1;
-  color: var(--pos-text-strong);
+  letter-spacing: -0.025em;
+  color: #10283b;
+  font-weight: 900;
 }
 
 .pos-context-meta {
@@ -14226,30 +14230,6 @@ body.rota-row-drag-copy-active {
   font-weight: 700;
   white-space: nowrap;
   border: 1px solid rgba(171, 189, 205, 0.36);
-}
-
-.pos-meta-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 0;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(152, 174, 195, 0.44);
-  background: rgba(252, 253, 254, 0.9);
-  color: #375067;
-  font-size: 0.64rem;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.pos-meta-action:hover,
-.pos-meta-action:focus-visible {
-  border-color: rgba(111, 145, 175, 0.8);
-  background: rgba(241, 247, 252, 0.98);
-  box-shadow: 0 8px 16px rgba(15, 34, 52, 0.06);
 }
 
 .pos-meta-shortcuts {
