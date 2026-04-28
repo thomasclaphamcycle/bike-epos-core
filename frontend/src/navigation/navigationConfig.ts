@@ -449,6 +449,12 @@ export const navigationSections: NavigationSection[] = [
         matchExact: ["/management/settings"],
       },
       {
+        kind: "link",
+        label: "Printers",
+        to: "/settings/printers",
+        minimumRole: "ADMIN",
+      },
+      {
         kind: "label",
         label: "Staff & Roles",
         minimumRole: "ADMIN",
@@ -477,6 +483,12 @@ export const navigationSections: NavigationSection[] = [
         kind: "link",
         label: "Workshop Settings",
         to: "/settings/workshop",
+        minimumRole: "ADMIN",
+      },
+      {
+        kind: "link",
+        label: "Shipping",
+        to: "/settings/shipping",
         minimumRole: "ADMIN",
       },
       {

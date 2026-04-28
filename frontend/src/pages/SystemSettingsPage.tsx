@@ -701,7 +701,17 @@ const formatManagedPrintTimestamp = (value: string | null) => {
   return new Date(value).toLocaleString();
 };
 
-export const SystemSettingsPage = () => {
+type SystemSettingsPageMode = "store-info" | "printers" | "workshop" | "shipping";
+
+type SystemSettingsPageProps = {
+  mode?: SystemSettingsPageMode;
+};
+
+export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPageProps) => {
+  const isStoreInfoMode = mode === "store-info";
+  const isPrintersMode = mode === "printers";
+  const isWorkshopSettingsMode = mode === "workshop";
+  const isShippingSettingsMode = mode === "shipping";
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [initialStore, setInitialStore] = useState<StoreInfo | null>(null);
@@ -1995,42 +2005,160 @@ export const SystemSettingsPage = () => {
     <div className="page-shell ui-page">
       <SurfaceCard className="store-info-hero" tone="soft">
         <PageHeader
-          eyebrow="Settings / Store Info"
-          title="Store Info"
-          description="Central business identity settings for receipts, customer communications, printed documents, and future storefront and profile surfaces."
+          eyebrow={
+            isPrintersMode
+              ? "Settings / Printers"
+              : isWorkshopSettingsMode
+                ? "Settings / Workshop"
+                : isShippingSettingsMode
+                  ? "Settings / Shipping"
+                  : "Settings / Store Info"
+          }
+          title={
+            isPrintersMode
+              ? "Printers"
+              : isWorkshopSettingsMode
+                ? "Workshop Settings"
+                : isShippingSettingsMode
+                  ? "Shipping"
+                  : "Store Info"
+          }
+          description={
+            isPrintersMode
+              ? "Registered printers, workstation defaults, managed queue controls, and helper URLs for receipts, labels, bike tags, and dispatch printing."
+              : isWorkshopSettingsMode
+                ? "Workshop workflow settings for service prompts, commercial suggestions, and job-facing behavior."
+                : isShippingSettingsMode
+                  ? "Courier/provider configuration for shipment creation, label buying, and dispatch defaults."
+                  : "Central business identity settings for customer communications, opening hours, printed documents, and future storefront surfaces."
+          }
           actions={(
             <div className="actions-inline">
-              <Link to="/settings/receipts">Receipts</Link>
-              <Link to="/settings/integrations">Integrations</Link>
+              {!isStoreInfoMode ? <Link to="/settings/store-info">Store Info</Link> : null}
+              {!isPrintersMode ? <Link to="/settings/printers">Printers</Link> : null}
+              {!isWorkshopSettingsMode ? <Link to="/settings/workshop">Workshop</Link> : null}
+              {!isShippingSettingsMode ? <Link to="/settings/shipping">Shipping</Link> : null}
             </div>
           )}
         />
 
-        <div className="dashboard-summary-grid">
-          <div className="metric-card">
-            <span className="metric-label">Business Identity</span>
-            <strong className="metric-value">{store?.name || "-"}</strong>
-            <span className="dashboard-metric-detail">Primary customer-facing store label</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Currency / Time Zone</span>
-            <strong className="metric-value">
-              {store ? `${store.defaultCurrency} · ${store.timeZone}` : "-"}
-            </strong>
-            <span className="dashboard-metric-detail">Used by future configuration-driven workflows</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Receipt Footer</span>
-            <strong className="metric-value">{store?.footerText ? "Configured" : "Default"}</strong>
-            <span className="dashboard-metric-detail">Synced into current receipt metadata compatibility settings</span>
-          </div>
-        </div>
+        {isPrintersMode ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Active Printers</span>
+                <strong className="metric-value">
+                  {printersPayload ? printersPayload.printers.filter((printer) => printer.isActive).length : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Registered live targets available to managed print flows</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Receipt Default</span>
+                <strong className="metric-value">{printersPayload?.defaultReceiptPrinter?.name ?? "Not set"}</strong>
+                <span className="dashboard-metric-detail">Fallback target when a workstation has no override</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Open Queue Jobs</span>
+                <strong className="metric-value">{managedPrintJobs.length}</strong>
+                <span className="dashboard-metric-detail">Pending, processing, or failed managed print jobs</span>
+              </div>
+            </div>
 
-        <div className="restricted-panel info-panel">
-          Store Info is the app-level source of truth for the shop&apos;s identity, opening hours, and other shared operational settings. Receipt settings stay compatible automatically, and weather plus rota features use the saved store schedule data.
-        </div>
+            <div className="restricted-panel info-panel">
+              Printers now has the local-printing controls in one place: registered devices, default targets, receipt workstations, print helpers, and the managed queue.
+            </div>
+          </>
+        ) : isWorkshopSettingsMode ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Commercial Suggestions</span>
+                <strong className="metric-value">
+                  {workshopCommercial?.commercialSuggestionsEnabled ? "Enabled" : "Disabled"}
+                </strong>
+                <span className="dashboard-metric-detail">Staff prompts across workshop intake and bike history</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Long-Gap Window</span>
+                <strong className="metric-value">
+                  {workshopCommercial ? `${workshopCommercial.commercialLongGapDays} days` : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Gap threshold before service prompts become relevant</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Prompt Cooldown</span>
+                <strong className="metric-value">
+                  {workshopCommercial ? `${workshopCommercial.commercialRecentServiceCooldownDays} days` : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Suppresses repeated recommendations after recent service</span>
+              </div>
+            </div>
+
+            <div className="restricted-panel info-panel">
+              Workshop Settings owns the behavior that changes how workshop staff see service prompts and commercial suggestions.
+            </div>
+          </>
+        ) : isShippingSettingsMode ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Default Provider</span>
+                <strong className="metric-value">{providerSettingsPayload?.defaultProviderKey ?? "Not set"}</strong>
+                <span className="dashboard-metric-detail">Provider used first for new shipment labels</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Available Providers</span>
+                <strong className="metric-value">
+                  {providerSettingsPayload ? providerSettingsPayload.providers.filter((provider) => provider.isAvailable).length : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Courier adapters ready for dispatch workflows</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Configured Providers</span>
+                <strong className="metric-value">
+                  {providerSettingsPayload
+                    ? providerSettingsPayload.providers.filter((provider) => Boolean(provider.configuration)).length
+                    : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">External provider records with saved configuration</span>
+              </div>
+            </div>
+
+            <div className="restricted-panel info-panel">
+              Shipping Settings keeps courier/provider choices separate from Store Info and printer hardware setup.
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Business Identity</span>
+                <strong className="metric-value">{store?.name || "-"}</strong>
+                <span className="dashboard-metric-detail">Primary customer-facing store label</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Currency / Time Zone</span>
+                <strong className="metric-value">
+                  {store ? `${store.defaultCurrency} · ${store.timeZone}` : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Used by future configuration-driven workflows</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Receipt Footer</span>
+                <strong className="metric-value">{store?.footerText ? "Configured" : "Default"}</strong>
+                <span className="dashboard-metric-detail">Synced into current receipt metadata compatibility settings</span>
+              </div>
+            </div>
+
+            <div className="restricted-panel info-panel">
+              Store Info is the app-level source of truth for the shop&apos;s identity, opening hours, and other shared operational settings. Printer-specific controls now live in their own Settings section.
+            </div>
+          </>
+        )}
       </SurfaceCard>
 
+      {isStoreInfoMode ? (
+        <>
       <SurfaceCard>
         <SectionHeader
           title="Business Details"
@@ -2355,7 +2483,11 @@ export const SystemSettingsPage = () => {
           </div>
         ) : null}
       </SurfaceCard>
+        </>
+      ) : null}
 
+      {isWorkshopSettingsMode ? (
+        <>
       <SurfaceCard>
         <SectionHeader
           title="Workshop Commercial Suggestions"
@@ -2449,7 +2581,11 @@ export const SystemSettingsPage = () => {
           </div>
         ) : null}
       </SurfaceCard>
+        </>
+      ) : null}
 
+      {isShippingSettingsMode ? (
+        <>
       <SurfaceCard>
         <SectionHeader
           title="Shipping Providers"
@@ -2794,7 +2930,11 @@ export const SystemSettingsPage = () => {
           </div>
         ) : null}
       </SurfaceCard>
+        </>
+      ) : null}
 
+      {isPrintersMode ? (
+        <>
       <SurfaceCard>
         <SectionHeader
           title="Registered Printers"
@@ -3788,33 +3928,8 @@ export const SystemSettingsPage = () => {
           </div>
         )}
       </SurfaceCard>
-
-      <section className="card">
-        <div className="card-header-row">
-          <div>
-            <h2>Future Reuse</h2>
-            <p className="muted-text">This page is intended to support more than just admin editing.</p>
-          </div>
-        </div>
-        <div className="store-info-support">
-          <div className="metric-card">
-            <span className="metric-label">Receipts & Printed Docs</span>
-            <span className="dashboard-metric-detail">Name, address, VAT number, and footer are kept compatible with current receipt generation.</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Customer Communications</span>
-            <span className="dashboard-metric-detail">Email, phone, website, and store name are ready for reminders, updates, and later outbound templates.</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Operational Scheduling</span>
-            <span className="dashboard-metric-detail">Opening hours now feed rota imports and dashboard staffing interpretation from the same Store Info source.</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-label">Website / Storefront</span>
-            <span className="dashboard-metric-detail">Logo, footer, address, and business identity fields can feed the future public-facing profile and site surfaces.</span>
-          </div>
-        </div>
-      </section>
+        </>
+      ) : null}
 
       <datalist id="store-timezones">
         {COMMON_TIME_ZONES.map((zone) => (
