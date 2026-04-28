@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { CustomerCaptureSession } from "./customerCapture";
 import {
   formatCaptureMatchOutcome,
@@ -80,6 +80,7 @@ export const PosCustomerCapturePanel = ({
   onRefreshStatus,
   onRefreshTarget,
 }: PosCustomerCapturePanelProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
   const timeLeftLabel =
@@ -261,72 +262,101 @@ export const PosCustomerCapturePanel = ({
         </div>
       ) : null}
 
-      <div className="quick-create-panel pos-customer-capture-panel" data-testid="pos-customer-capture-panel">
+      <div
+        className={`quick-create-panel pos-customer-capture-panel ${isExpanded ? "pos-customer-capture-panel-expanded" : "pos-customer-capture-panel-collapsed"}`}
+        data-testid="pos-customer-capture-panel"
+      >
         <div className="card-header-row pos-customer-capture-header">
           <div className="pos-customer-capture-header-copy">
-            <div className="table-primary">Tap Customer</div>
+            {isExpanded ? <div className="table-primary">Tap Customer</div> : null}
             <p className="pos-customer-capture-eyebrow">NFC capture flow</p>
           </div>
-          {isCaptureEligible ? (
-            captureSession?.status === "COMPLETED" && target ? (
+          {!isExpanded ? (
+            <button
+              type="button"
+              className="primary pos-customer-capture-open"
+              data-testid="pos-customer-capture-open"
+              aria-label="Initiate NFC customer capture flow"
+              aria-expanded={isExpanded}
+              onClick={() => setIsExpanded(true)}
+            >
+              Initiate
+            </button>
+          ) : (
+            <div className="pos-customer-capture-header-actions">
+              {isCaptureEligible ? (
+                captureSession?.status === "COMPLETED" && target ? (
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-customer-capture-refresh-sale"
+                    onClick={onRefreshTarget}
+                  >
+                    Refresh {captureContextLabel}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="primary"
+                    data-testid="pos-customer-capture-generate"
+                    onClick={onCreateCustomerCaptureSession}
+                    disabled={actionsDisabled || creatingCaptureSession || captureSessionLoading}
+                  >
+                    {creatingCaptureSession ? "Preparing..." : "Start"}
+                  </button>
+                )
+              ) : null}
               <button
                 type="button"
-                className="primary"
-                data-testid="pos-customer-capture-refresh-sale"
-                onClick={onRefreshTarget}
+                className="secondary pos-customer-capture-close"
+                data-testid="pos-customer-capture-close"
+                aria-expanded={isExpanded}
+                onClick={() => setIsExpanded(false)}
               >
-                Refresh {captureContextLabel}
+                Close
               </button>
-            ) : (
-              <button
-                type="button"
-                className="primary"
-                data-testid="pos-customer-capture-generate"
-                onClick={onCreateCustomerCaptureSession}
-                disabled={actionsDisabled || creatingCaptureSession || captureSessionLoading}
-              >
-                {creatingCaptureSession ? "Preparing..." : "Start"}
-              </button>
-            )
-          ) : null}
+            </div>
+          )}
         </div>
 
-        <div className="pos-customer-capture-state-shell">
-          <div
-            className={`pos-customer-capture-stage-card pos-customer-capture-stage-card-${stageTone}`}
-            data-testid={stageTestId}
-          >
-            <div className="pos-customer-capture-stage-rail" aria-hidden="true">
-              {STAGE_STEPS.map((step) => (
-                <div
-                  key={step.key}
-                  className={`pos-customer-capture-step pos-customer-capture-step-${getStepState(step.key, activeStep)}`}
-                >
-                  <span className="pos-customer-capture-step-light" />
-                  <span className="pos-customer-capture-step-label">{step.label}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="pos-customer-capture-stage-main">
-              <div className="pos-customer-capture-stage-header">
-                <div className="pos-customer-capture-stage-title-wrap">
-                  <span className={`status-badge pos-customer-capture-stage-badge pos-customer-capture-stage-badge-${stageTone}`}>
-                    {stageLabel}
-                  </span>
-                  <strong data-testid={stageTestId === "pos-customer-capture-ready-state" ? "pos-customer-capture-ready-title" : undefined}>
-                    {stageTitle}
-                  </strong>
-                </div>
-                {stageAction}
+        {isExpanded ? (
+          <div className="pos-customer-capture-state-shell">
+            <div
+              className={`pos-customer-capture-stage-card pos-customer-capture-stage-card-${stageTone}`}
+              data-testid={stageTestId}
+            >
+              <div className="pos-customer-capture-stage-rail" aria-hidden="true">
+                {STAGE_STEPS.map((step) => (
+                  <div
+                    key={step.key}
+                    className={`pos-customer-capture-step pos-customer-capture-step-${getStepState(step.key, activeStep)}`}
+                  >
+                    <span className="pos-customer-capture-step-light" />
+                    <span className="pos-customer-capture-step-label">{step.label}</span>
+                  </div>
+                ))}
               </div>
 
-              <div className="pos-customer-capture-stage-body">
-                {stageBody}
+              <div className="pos-customer-capture-stage-main">
+                <div className="pos-customer-capture-stage-header">
+                  <div className="pos-customer-capture-stage-title-wrap">
+                    <span className={`status-badge pos-customer-capture-stage-badge pos-customer-capture-stage-badge-${stageTone}`}>
+                      {stageLabel}
+                    </span>
+                    <strong data-testid={stageTestId === "pos-customer-capture-ready-state" ? "pos-customer-capture-ready-title" : undefined}>
+                      {stageTitle}
+                    </strong>
+                  </div>
+                  {stageAction}
+                </div>
+
+                <div className="pos-customer-capture-stage-body">
+                  {stageBody}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </>
   );

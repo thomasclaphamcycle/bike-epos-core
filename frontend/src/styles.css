@@ -14638,6 +14638,15 @@ body.rota-row-drag-copy-active {
     inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
+.pos-customer-capture-panel-collapsed {
+  margin-top: 6px;
+  padding: 7px 9px;
+  gap: 0;
+  box-shadow:
+    0 8px 18px rgba(18, 38, 63, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
 .pos-customer-capture-state-shell {
   min-height: 164px;
 }
@@ -14652,6 +14661,14 @@ body.rota-row-drag-copy-active {
   gap: 8px;
 }
 
+.pos-customer-capture-panel-collapsed .pos-customer-capture-header {
+  align-items: center;
+}
+
+.pos-customer-capture-panel-collapsed .pos-customer-capture-header-copy {
+  gap: 1px;
+}
+
 .pos-customer-capture-header-copy,
 .pos-customer-capture-state-copy {
   display: grid;
@@ -14663,12 +14680,27 @@ body.rota-row-drag-copy-active {
   flex: 1 1 auto;
 }
 
+.pos-customer-capture-header-actions {
+  display: flex;
+  align-items: start;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .pos-customer-capture-header .primary,
+.pos-customer-capture-open,
+.pos-customer-capture-close,
 .pos-customer-capture-live-header button,
 .pos-customer-capture-refresh {
   min-height: 32px;
   padding: 0 10px;
   white-space: nowrap;
+}
+
+.pos-customer-capture-open {
+  min-height: 28px;
+  padding-inline: 9px;
 }
 
 .pos-customer-capture-summary-note,
@@ -14687,6 +14719,18 @@ body.rota-row-drag-copy-active {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #4f6a82;
+}
+
+.pos-customer-capture-panel-collapsed .pos-customer-capture-eyebrow {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid rgba(38, 92, 139, 0.18);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(223, 238, 250, 0.96), rgba(204, 225, 242, 0.94));
+  color: #17496f;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 .pos-customer-capture-panel .cash-qr-copy label {
