@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../api/client";
+import { type AppConfig, useAppConfig } from "../config/appConfig";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { PosCustomerCapturePanel } from "../features/customerCapture/PosCustomerCapturePanel";
@@ -143,7 +144,33 @@ type CompleteSaleResult = {
   receiptUrl?: string;
 };
 
-type TenderMethod = "CASH" | "CARD";
+type TenderMethod = AppConfig["pos"]["enabledTenderMethods"][number];
+type SaleTenderMethod = Exclude<TenderMethod, "STORE_CREDIT">;
+
+type CreditBalanceResponse = {
+  account: {
+    id: string;
+    customerId: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  balancePence: number;
+};
+
+type CreditApplyResponse = {
+  appliedPence: number;
+  outstandingPence: number;
+  balancePence: number;
+};
+
+type SaleTenderSummaryResponse = {
+  tenderedPence: number;
+  tenders: Array<{
+    id: string;
+    method: string;
+    amountPence: number;
+  }>;
+};
 
 type CompletedSaleState = {
   saleId: string;
@@ -158,6 +185,26 @@ type CompletedSaleState = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const TENDER_METHOD_OPTIONS: Array<{ value: TenderMethod; label: string; shortLabel: string }> = [
+  { value: "CARD", label: "Card", shortLabel: "Card" },
+  { value: "CASH", label: "Cash", shortLabel: "Cash" },
+  { value: "BANK_TRANSFER", label: "Bank transfer", shortLabel: "Bank" },
+  { value: "VOUCHER", label: "Voucher", shortLabel: "Voucher" },
+  { value: "STORE_CREDIT", label: "Store credit", shortLabel: "S.Credit" },
+];
+
+const FALLBACK_TENDER_METHODS: TenderMethod[] = ["CARD", "CASH"];
+
+const isSaleTenderMethod = (method: TenderMethod): method is SaleTenderMethod =>
+  method !== "STORE_CREDIT";
+
+const getTenderMethodLabel = (method: TenderMethod | string) =>
+  TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
+
+const getTenderMethodShortLabel = (method: TenderMethod | string) =>
+  TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.shortLabel
+  ?? getTenderMethodLabel(method);
 
 const getPosReceiptPrintButtonLabel = (
   queueing: boolean,
@@ -216,6 +263,7 @@ export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToasts();
+  const appConfig = useAppConfig();
   const isPageActiveRef = useRef(true);
   const posLifecycleRequestIdRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -264,8 +312,18 @@ export const PosPage = () => {
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [confirmingCardPayment, setConfirmingCardPayment] = useState(false);
 
   const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
+  const enabledTenderMethods = useMemo(() => {
+    const configured = new Set(appConfig.pos.enabledTenderMethods);
+    const enabled = TENDER_METHOD_OPTIONS
+      .map((option) => option.value)
+      .filter((method) => configured.has(method));
+
+    return enabled.length > 0 ? enabled : FALLBACK_TENDER_METHODS;
+  }, [appConfig.pos.enabledTenderMethods]);
+  const defaultTenderMethod = enabledTenderMethods[0] ?? "CARD";
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
@@ -296,6 +354,13 @@ export const PosPage = () => {
   useEffect(() => {
     selectedCustomerStateRef.current = selectedCustomer;
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!enabledTenderMethods.includes(selectedTenderMethod)) {
+      setSelectedTenderMethod(defaultTenderMethod);
+      setCashTenderedAmount("");
+    }
+  }, [defaultTenderMethod, enabledTenderMethods, selectedTenderMethod]);
 
   useEffect(() => {
     if (!selectedCustomer?.id && customerProfileModalOpen) {
@@ -361,6 +426,13 @@ export const PosPage = () => {
         searchFocusFrameRef.current = null;
       });
     });
+  };
+
+  const chooseTenderMethod = (method: TenderMethod) => {
+    setSelectedTenderMethod(method);
+    if (method !== "CASH") {
+      setCashTenderedAmount("");
+    }
   };
 
   const flashBasketRow = (itemId: string | null) => {
@@ -1337,6 +1409,76 @@ export const PosPage = () => {
     }
   };
 
+  const applyStoreCreditTender = async (amountPence: number) => {
+    if (!sale) {
+      throw new Error("No sale to apply store credit to.");
+    }
+
+    const creditCustomer = sale.sale.customer ?? selectedCustomer;
+    if (!creditCustomer?.id && !creditCustomer?.email && !creditCustomer?.phone) {
+      throw new Error("Attach a customer before using store credit.");
+    }
+
+    const creditIdentity = {
+      ...(creditCustomer.id ? { customerId: creditCustomer.id } : {}),
+      ...(creditCustomer.email ? { email: creditCustomer.email } : {}),
+      ...(creditCustomer.phone ? { phone: creditCustomer.phone } : {}),
+    };
+
+    const balanceParams = new URLSearchParams(creditIdentity);
+    const balance = await apiGet<CreditBalanceResponse>(`/api/credits/balance?${balanceParams.toString()}`);
+    if (balance.balancePence < amountPence) {
+      throw new Error(
+        `Store credit balance is ${formatMoney(balance.balancePence)}. ${formatMoney(amountPence)} is required.`,
+      );
+    }
+
+    const credit = await apiPost<CreditApplyResponse>("/api/credits/apply", {
+      saleId: sale.sale.id,
+      ...creditIdentity,
+      amountPence,
+      notes: "Applied from POS checkout",
+      idempotencyKey: `pos-store-credit:${sale.sale.id}:${amountPence}`,
+    });
+
+    const summary = await apiGet<SaleTenderSummaryResponse>(
+      `/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`,
+    );
+    const expectedTenderedPence = sale.tenderSummary.tenderedPence + credit.appliedPence;
+    if (summary.tenderedPence < expectedTenderedPence) {
+      await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
+        method: "VOUCHER",
+        amountPence: credit.appliedPence,
+      });
+    }
+  };
+
+  const confirmManualCardPayment = async () => {
+    if (!sale) {
+      error("No sale to confirm card payment for.");
+      return;
+    }
+    if (payablePence <= 0) {
+      success("Card payment is already covered.");
+      return;
+    }
+
+    setConfirmingCardPayment(true);
+    try {
+      await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
+        method: "CARD",
+        amountPence: payablePence,
+      });
+      await loadSale(sale.sale.id);
+      success("Card payment confirmed.");
+    } catch (cardError) {
+      const message = cardError instanceof Error ? cardError.message : "Card payment confirmation failed";
+      error(message);
+    } finally {
+      setConfirmingCardPayment(false);
+    }
+  };
+
   const completeSale = async () => {
     if (!sale) {
       error("No sale to complete.");
@@ -1359,10 +1501,17 @@ export const PosPage = () => {
           }
         }
 
-        await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
-          method: selectedTenderMethod,
-          amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : payablePence,
-        });
+        if (selectedTenderMethod === "STORE_CREDIT") {
+          await applyStoreCreditTender(payablePence);
+        } else if (selectedTenderMethod === "CARD") {
+          error("Confirm card payment before completing the sale.");
+          return;
+        } else if (isSaleTenderMethod(selectedTenderMethod)) {
+          await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
+            method: selectedTenderMethod,
+            amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : payablePence,
+          });
+        }
       }
 
       const result = await apiPost<CompleteSaleResult>(
@@ -1382,7 +1531,7 @@ export const PosPage = () => {
       });
       setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
       await createBasket();
-      setSelectedTenderMethod("CARD");
+      setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
       success("Sale completed.");
     } catch (completeError) {
@@ -1532,6 +1681,19 @@ export const PosPage = () => {
     : saleContext.type === "WORKSHOP" && saleContext.customerName
       ? "Workshop contact"
       : "No profile attached";
+  const storeCreditCustomer = sale?.sale.customer ?? selectedCustomer;
+  const storeCreditValidationMessage =
+    selectedTenderMethod === "STORE_CREDIT"
+    && !storeCreditCustomer?.id
+    && !storeCreditCustomer?.email
+    && !storeCreditCustomer?.phone
+      ? "Attach a customer before using store credit."
+      : null;
+  const cardValidationMessage =
+    selectedTenderMethod === "CARD" && payablePence > 0
+      ? "Confirm card approval before completing the sale."
+      : null;
+  const tenderValidationMessage = cashValidationMessage ?? storeCreditValidationMessage ?? cardValidationMessage;
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
@@ -1541,7 +1703,7 @@ export const PosPage = () => {
       return;
     }
 
-    setSelectedTenderMethod("CARD");
+    setSelectedTenderMethod(defaultTenderMethod);
     setCashTenderedAmount("");
     await createBasket();
   };
@@ -1575,7 +1737,7 @@ export const PosPage = () => {
       if (event.key === "F4") {
         event.preventDefault();
         setCompletedSale(null);
-        setSelectedTenderMethod("CARD");
+        setSelectedTenderMethod(defaultTenderMethod);
         setCashTenderedAmount("");
         void createBasket();
         return;
@@ -1587,7 +1749,7 @@ export const PosPage = () => {
         return;
       }
 
-      if (event.key === "F9" && sale && !completing && !cashValidationMessage) {
+      if (event.key === "F9" && sale && !completing && !confirmingCardPayment && !tenderValidationMessage) {
         event.preventDefault();
         void completeSale();
       }
@@ -1597,7 +1759,7 @@ export const PosPage = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [basket, cashValidationMessage, completing, sale]);
+  }, [basket, completing, confirmingCardPayment, defaultTenderMethod, sale, tenderValidationMessage]);
 
   return (
     <div className="page-shell pos-page-shell">
@@ -1643,7 +1805,7 @@ export const PosPage = () => {
                     className="pos-meta-action"
                     onClick={() => {
                       setCompletedSale(null);
-                      setSelectedTenderMethod("CARD");
+                      setSelectedTenderMethod(defaultTenderMethod);
                       setCashTenderedAmount("");
                       void createBasket();
                     }}
@@ -1671,7 +1833,7 @@ export const PosPage = () => {
                     </div>
                     <div>
                       <div className="muted-text">Tender</div>
-                      <div className="table-primary">{completedSale.tenderMethod}</div>
+                      <div className="table-primary">{getTenderMethodLabel(completedSale.tenderMethod)}</div>
                     </div>
                     <div>
                       <div className="muted-text">Total paid</div>
@@ -2322,23 +2484,44 @@ export const PosPage = () => {
                   </div>
 
                   <div className="actions-inline pos-tender-switch" role="group" aria-label="Tender type">
-                    <button
-                      type="button"
-                      className={selectedTenderMethod === "CARD" ? "primary" : ""}
-                      onClick={() => setSelectedTenderMethod("CARD")}
-                      disabled={completing}
-                    >
-                      Card
-                    </button>
-                    <button
-                      type="button"
-                      className={selectedTenderMethod === "CASH" ? "primary" : ""}
-                      onClick={() => setSelectedTenderMethod("CASH")}
-                      disabled={completing}
-                    >
-                      Cash
-                    </button>
+                    {enabledTenderMethods.map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        className={selectedTenderMethod === method ? "primary" : ""}
+                        onClick={() => chooseTenderMethod(method)}
+                        disabled={completing || confirmingCardPayment}
+                        aria-label={getTenderMethodLabel(method)}
+                        title={getTenderMethodLabel(method)}
+                      >
+                        {getTenderMethodShortLabel(method)}
+                      </button>
+                    ))}
                   </div>
+
+                  {selectedTenderMethod === "CARD" ? (
+                    <div className="quick-create-panel pos-card-panel">
+                      <div>
+                        <strong>Manual card approval</strong>
+                        <p className="muted-text">
+                          Confirm the card machine has approved {formatMoney(payablePence)} before completing this sale.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid="pos-confirm-card-payment"
+                        onClick={() => void confirmManualCardPayment()}
+                        disabled={payablePence <= 0 || completing || confirmingCardPayment}
+                      >
+                        {payablePence <= 0
+                          ? "Card confirmed"
+                          : confirmingCardPayment
+                            ? "Confirming..."
+                            : "Confirm card approved"}
+                      </button>
+                    </div>
+                  ) : null}
 
                   {selectedTenderMethod === "CASH" ? (
                     <div className="quick-create-panel pos-cash-panel">
@@ -2384,6 +2567,22 @@ export const PosPage = () => {
                       {cashValidationMessage ? <p className="muted-text pos-cash-warning">{cashValidationMessage}</p> : null}
                     </div>
                   ) : null}
+
+                  {selectedTenderMethod === "STORE_CREDIT" ? (
+                    <div className="quick-create-panel pos-store-credit-panel">
+                      <strong>Store credit</strong>
+                      <p className="muted-text">
+                        Uses the attached customer's available credit balance for the amount due.
+                      </p>
+                      {storeCreditValidationMessage ? (
+                        <p className="muted-text pos-cash-warning">{storeCreditValidationMessage}</p>
+                      ) : (
+                        <p className="muted-text">
+                          Customer: {storeCreditCustomer?.name ?? "Linked account"}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
                 </>
               ) : null}
 
@@ -2394,7 +2593,7 @@ export const PosPage = () => {
                     className="primary"
                     data-testid="pos-complete-sale"
                     onClick={completeSale}
-                    disabled={completing || Boolean(cashValidationMessage)}
+                    disabled={completing || confirmingCardPayment || Boolean(tenderValidationMessage)}
                   >
                     {completing ? "Completing..." : "Complete Sale"}
                   </button>

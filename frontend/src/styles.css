@@ -10828,6 +10828,57 @@ button.primary.workshop-status-action {
   justify-self: start;
 }
 
+.pos-settings-page {
+  gap: 18px;
+}
+
+.pos-settings-section {
+  margin: 0;
+}
+
+.pos-settings-toggle {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.pos-settings-toggle > span {
+  display: grid;
+  gap: 3px;
+}
+
+.pos-settings-field-note {
+  color: #64748b;
+  display: block;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.pos-settings-fieldset {
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+}
+
+.pos-settings-fieldset legend {
+  color: #29445d;
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.pos-settings-checkbox-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.pos-settings-actions {
+  justify-content: flex-end;
+}
+
 .managed-print-job-list {
   display: grid;
   gap: 12px;
@@ -15437,12 +15488,51 @@ body.rota-row-drag-copy-active {
 
 .pos-tender-switch {
   margin-top: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.pos-tender-switch button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
+.pos-card-panel {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid rgba(93, 142, 190, 0.48);
+  background: rgba(244, 250, 255, 0.78);
+}
+
+.pos-card-panel p {
+  margin: 6px 0 0;
+}
+
+.pos-card-panel .primary {
+  width: 100%;
 }
 
 .pos-cash-panel {
   margin-top: 0;
   border: 1px solid rgba(214, 171, 133, 0.54);
   background: rgba(255, 250, 245, 0.72);
+}
+
+.pos-store-credit-panel {
+  margin-top: 0;
+  border: 1px solid rgba(122, 171, 145, 0.48);
+  background: rgba(242, 251, 246, 0.78);
+}
+
+.pos-store-credit-panel p {
+  margin: 6px 0 0;
 }
 
 .pos-cash-grid {

@@ -44,6 +44,31 @@ export type ShopSettings = {
   pos: {
     defaultTaxRatePercent: number;
     barcodeSearchAutoFocus: boolean;
+    defaultSaleType: "RETAIL" | "QUOTE";
+    defaultCustomerType: "WALK_IN" | "PROFILE";
+    newBasketMode: "RETAIL_WALK_IN" | "RETAIL_CUSTOMER" | "QUOTE";
+    requireCustomerBeforeCheckout: boolean;
+    allowZeroPriceLines: boolean;
+    allowNegativeDiscounts: boolean;
+    managerApprovalForDiscounts: boolean;
+    managerApprovalForRefunds: boolean;
+    managerApprovalForVoids: boolean;
+    autoClearBasketAfterSale: boolean;
+    holdBasketTtlHours: number;
+    quoteExpiryDays: number;
+    requireLineNotes: boolean;
+    scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
+    quickAddEnabled: boolean;
+    duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
+    enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
+    splitPaymentsEnabled: boolean;
+    cashRoundingMode: "NONE" | "NEAREST_5P" | "NEAREST_10P";
+    promptForReceiptAfterPayment: boolean;
+    requirePinForCheckout: boolean;
+    requireManagerOverrideForRestrictedActions: boolean;
+    tillLockTimeoutSeconds: number;
+    compactBasketView: boolean;
+    showKeyboardShortcutHints: boolean;
   };
   workshop: {
     defaultJobDurationMinutes: number;
@@ -357,6 +382,52 @@ const normalizePercentSetting = (value: unknown, field: string) => {
   return Math.round(value * 100) / 100;
 };
 
+const normalizeEnumSetting = <T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  allowedValues: T,
+): T[number] => {
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a string`, "INVALID_SETTINGS");
+  }
+
+  if (!allowedValues.includes(value as T[number])) {
+    throw new HttpError(
+      400,
+      `${field} must be one of ${allowedValues.join(", ")}`,
+      "INVALID_SETTINGS",
+    );
+  }
+
+  return value as T[number];
+};
+
+const normalizeEnumArraySetting = <T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  allowedValues: T,
+  { minItems = 0 }: { minItems?: number } = {},
+): Array<T[number]> => {
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, `${field} must be an array`, "INVALID_SETTINGS");
+  }
+
+  const normalized = value.map((entry, index) =>
+    normalizeEnumSetting(entry, `${field}[${index}]`, allowedValues),
+  );
+  const uniqueValues = [...new Set(normalized)];
+
+  if (uniqueValues.length < minItems) {
+    throw new HttpError(
+      400,
+      `${field} must include at least ${minItems} value${minItems === 1 ? "" : "s"}`,
+      "INVALID_SETTINGS",
+    );
+  }
+
+  return uniqueValues;
+};
+
 const normalizeNullableCoordinateSetting = (
   value: unknown,
   field: string,
@@ -493,6 +564,163 @@ const SETTINGS_DEFINITIONS = {
     key: "pos.barcodeSearchAutoFocus",
     defaultValue: true,
     validate: (value: unknown) => normalizeBooleanSetting(value, "pos.barcodeSearchAutoFocus"),
+  },
+  "pos.defaultSaleType": {
+    key: "pos.defaultSaleType",
+    defaultValue: "RETAIL" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(value, "pos.defaultSaleType", ["RETAIL", "QUOTE"] as const),
+  },
+  "pos.defaultCustomerType": {
+    key: "pos.defaultCustomerType",
+    defaultValue: "WALK_IN" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(value, "pos.defaultCustomerType", ["WALK_IN", "PROFILE"] as const),
+  },
+  "pos.newBasketMode": {
+    key: "pos.newBasketMode",
+    defaultValue: "RETAIL_WALK_IN" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(
+        value,
+        "pos.newBasketMode",
+        ["RETAIL_WALK_IN", "RETAIL_CUSTOMER", "QUOTE"] as const,
+      ),
+  },
+  "pos.requireCustomerBeforeCheckout": {
+    key: "pos.requireCustomerBeforeCheckout",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.requireCustomerBeforeCheckout"),
+  },
+  "pos.allowZeroPriceLines": {
+    key: "pos.allowZeroPriceLines",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.allowZeroPriceLines"),
+  },
+  "pos.allowNegativeDiscounts": {
+    key: "pos.allowNegativeDiscounts",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.allowNegativeDiscounts"),
+  },
+  "pos.managerApprovalForDiscounts": {
+    key: "pos.managerApprovalForDiscounts",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.managerApprovalForDiscounts"),
+  },
+  "pos.managerApprovalForRefunds": {
+    key: "pos.managerApprovalForRefunds",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.managerApprovalForRefunds"),
+  },
+  "pos.managerApprovalForVoids": {
+    key: "pos.managerApprovalForVoids",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.managerApprovalForVoids"),
+  },
+  "pos.autoClearBasketAfterSale": {
+    key: "pos.autoClearBasketAfterSale",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.autoClearBasketAfterSale"),
+  },
+  "pos.holdBasketTtlHours": {
+    key: "pos.holdBasketTtlHours",
+    defaultValue: 24,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "pos.holdBasketTtlHours", { min: 1, max: 720 }),
+  },
+  "pos.quoteExpiryDays": {
+    key: "pos.quoteExpiryDays",
+    defaultValue: 30,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "pos.quoteExpiryDays", { min: 1, max: 365 }),
+  },
+  "pos.requireLineNotes": {
+    key: "pos.requireLineNotes",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.requireLineNotes"),
+  },
+  "pos.scanQuantityMode": {
+    key: "pos.scanQuantityMode",
+    defaultValue: "INCREMENT_ONE" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(
+        value,
+        "pos.scanQuantityMode",
+        ["INCREMENT_ONE", "PROMPT_QUANTITY", "USE_TYPED_QUANTITY"] as const,
+      ),
+  },
+  "pos.quickAddEnabled": {
+    key: "pos.quickAddEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.quickAddEnabled"),
+  },
+  "pos.duplicateScanBehavior": {
+    key: "pos.duplicateScanBehavior",
+    defaultValue: "INCREMENT_QUANTITY" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(
+        value,
+        "pos.duplicateScanBehavior",
+        ["INCREMENT_QUANTITY", "ADD_SEPARATE_LINE", "PROMPT"] as const,
+      ),
+  },
+  "pos.enabledTenderMethods": {
+    key: "pos.enabledTenderMethods",
+    defaultValue: ["CARD", "CASH"] as ShopSettings["pos"]["enabledTenderMethods"],
+    validate: (value: unknown) =>
+      normalizeEnumArraySetting(
+        value,
+        "pos.enabledTenderMethods",
+        ["CASH", "CARD", "BANK_TRANSFER", "VOUCHER", "STORE_CREDIT"] as const,
+        { minItems: 1 },
+      ),
+  },
+  "pos.splitPaymentsEnabled": {
+    key: "pos.splitPaymentsEnabled",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.splitPaymentsEnabled"),
+  },
+  "pos.cashRoundingMode": {
+    key: "pos.cashRoundingMode",
+    defaultValue: "NONE" as const,
+    validate: (value: unknown) =>
+      normalizeEnumSetting(
+        value,
+        "pos.cashRoundingMode",
+        ["NONE", "NEAREST_5P", "NEAREST_10P"] as const,
+      ),
+  },
+  "pos.promptForReceiptAfterPayment": {
+    key: "pos.promptForReceiptAfterPayment",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.promptForReceiptAfterPayment"),
+  },
+  "pos.requirePinForCheckout": {
+    key: "pos.requirePinForCheckout",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.requirePinForCheckout"),
+  },
+  "pos.requireManagerOverrideForRestrictedActions": {
+    key: "pos.requireManagerOverrideForRestrictedActions",
+    defaultValue: true,
+    validate: (value: unknown) =>
+      normalizeBooleanSetting(value, "pos.requireManagerOverrideForRestrictedActions"),
+  },
+  "pos.tillLockTimeoutSeconds": {
+    key: "pos.tillLockTimeoutSeconds",
+    defaultValue: 300,
+    validate: (value: unknown) =>
+      normalizeIntegerSetting(value, "pos.tillLockTimeoutSeconds", { min: 15, max: 86400 }),
+  },
+  "pos.compactBasketView": {
+    key: "pos.compactBasketView",
+    defaultValue: false,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.compactBasketView"),
+  },
+  "pos.showKeyboardShortcutHints": {
+    key: "pos.showKeyboardShortcutHints",
+    defaultValue: true,
+    validate: (value: unknown) => normalizeBooleanSetting(value, "pos.showKeyboardShortcutHints"),
   },
   "workshop.defaultJobDurationMinutes": {
     key: "workshop.defaultJobDurationMinutes",
@@ -667,6 +895,106 @@ const toSettingsSnapshot = (
       barcodeSearchAutoFocus: getSettingValue(
         valueByKey.get("pos.barcodeSearchAutoFocus"),
         SETTINGS_DEFINITIONS["pos.barcodeSearchAutoFocus"],
+      ),
+      defaultSaleType: getSettingValue(
+        valueByKey.get("pos.defaultSaleType"),
+        SETTINGS_DEFINITIONS["pos.defaultSaleType"],
+      ),
+      defaultCustomerType: getSettingValue(
+        valueByKey.get("pos.defaultCustomerType"),
+        SETTINGS_DEFINITIONS["pos.defaultCustomerType"],
+      ),
+      newBasketMode: getSettingValue(
+        valueByKey.get("pos.newBasketMode"),
+        SETTINGS_DEFINITIONS["pos.newBasketMode"],
+      ),
+      requireCustomerBeforeCheckout: getSettingValue(
+        valueByKey.get("pos.requireCustomerBeforeCheckout"),
+        SETTINGS_DEFINITIONS["pos.requireCustomerBeforeCheckout"],
+      ),
+      allowZeroPriceLines: getSettingValue(
+        valueByKey.get("pos.allowZeroPriceLines"),
+        SETTINGS_DEFINITIONS["pos.allowZeroPriceLines"],
+      ),
+      allowNegativeDiscounts: getSettingValue(
+        valueByKey.get("pos.allowNegativeDiscounts"),
+        SETTINGS_DEFINITIONS["pos.allowNegativeDiscounts"],
+      ),
+      managerApprovalForDiscounts: getSettingValue(
+        valueByKey.get("pos.managerApprovalForDiscounts"),
+        SETTINGS_DEFINITIONS["pos.managerApprovalForDiscounts"],
+      ),
+      managerApprovalForRefunds: getSettingValue(
+        valueByKey.get("pos.managerApprovalForRefunds"),
+        SETTINGS_DEFINITIONS["pos.managerApprovalForRefunds"],
+      ),
+      managerApprovalForVoids: getSettingValue(
+        valueByKey.get("pos.managerApprovalForVoids"),
+        SETTINGS_DEFINITIONS["pos.managerApprovalForVoids"],
+      ),
+      autoClearBasketAfterSale: getSettingValue(
+        valueByKey.get("pos.autoClearBasketAfterSale"),
+        SETTINGS_DEFINITIONS["pos.autoClearBasketAfterSale"],
+      ),
+      holdBasketTtlHours: getSettingValue(
+        valueByKey.get("pos.holdBasketTtlHours"),
+        SETTINGS_DEFINITIONS["pos.holdBasketTtlHours"],
+      ),
+      quoteExpiryDays: getSettingValue(
+        valueByKey.get("pos.quoteExpiryDays"),
+        SETTINGS_DEFINITIONS["pos.quoteExpiryDays"],
+      ),
+      requireLineNotes: getSettingValue(
+        valueByKey.get("pos.requireLineNotes"),
+        SETTINGS_DEFINITIONS["pos.requireLineNotes"],
+      ),
+      scanQuantityMode: getSettingValue(
+        valueByKey.get("pos.scanQuantityMode"),
+        SETTINGS_DEFINITIONS["pos.scanQuantityMode"],
+      ),
+      quickAddEnabled: getSettingValue(
+        valueByKey.get("pos.quickAddEnabled"),
+        SETTINGS_DEFINITIONS["pos.quickAddEnabled"],
+      ),
+      duplicateScanBehavior: getSettingValue(
+        valueByKey.get("pos.duplicateScanBehavior"),
+        SETTINGS_DEFINITIONS["pos.duplicateScanBehavior"],
+      ),
+      enabledTenderMethods: getSettingValue(
+        valueByKey.get("pos.enabledTenderMethods"),
+        SETTINGS_DEFINITIONS["pos.enabledTenderMethods"],
+      ),
+      splitPaymentsEnabled: getSettingValue(
+        valueByKey.get("pos.splitPaymentsEnabled"),
+        SETTINGS_DEFINITIONS["pos.splitPaymentsEnabled"],
+      ),
+      cashRoundingMode: getSettingValue(
+        valueByKey.get("pos.cashRoundingMode"),
+        SETTINGS_DEFINITIONS["pos.cashRoundingMode"],
+      ),
+      promptForReceiptAfterPayment: getSettingValue(
+        valueByKey.get("pos.promptForReceiptAfterPayment"),
+        SETTINGS_DEFINITIONS["pos.promptForReceiptAfterPayment"],
+      ),
+      requirePinForCheckout: getSettingValue(
+        valueByKey.get("pos.requirePinForCheckout"),
+        SETTINGS_DEFINITIONS["pos.requirePinForCheckout"],
+      ),
+      requireManagerOverrideForRestrictedActions: getSettingValue(
+        valueByKey.get("pos.requireManagerOverrideForRestrictedActions"),
+        SETTINGS_DEFINITIONS["pos.requireManagerOverrideForRestrictedActions"],
+      ),
+      tillLockTimeoutSeconds: getSettingValue(
+        valueByKey.get("pos.tillLockTimeoutSeconds"),
+        SETTINGS_DEFINITIONS["pos.tillLockTimeoutSeconds"],
+      ),
+      compactBasketView: getSettingValue(
+        valueByKey.get("pos.compactBasketView"),
+        SETTINGS_DEFINITIONS["pos.compactBasketView"],
+      ),
+      showKeyboardShortcutHints: getSettingValue(
+        valueByKey.get("pos.showKeyboardShortcutHints"),
+        SETTINGS_DEFINITIONS["pos.showKeyboardShortcutHints"],
       ),
     },
     workshop: {

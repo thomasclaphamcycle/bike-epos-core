@@ -287,6 +287,10 @@ export const OpsHealthPage = lazyPage(
   () => import("./pages/OpsHealthPage"),
   "OpsHealthPage",
 );
+export const PosSettingsPage = lazyPage(
+  () => import("./pages/PosSettingsPage"),
+  "PosSettingsPage",
+);
 export const preloadPrimaryRoute = async (path: string) => {
   const normalizedPath = path.trim();
 
@@ -327,6 +331,7 @@ export const preloadPrimaryRoute = async (path: string) => {
     [(value) => value === "/online-store/orders", OnlineStoreOrdersPage.preload],
     [(value) => value.startsWith("/online-store/") && value !== "/online-store/orders", NavigationPlaceholderPage.preload],
     [(value) => value === "/settings/store-info" || value === "/management/settings", SystemSettingsPage.preload],
+    [(value) => value === "/settings/pos", PosSettingsPage.preload],
     [(value) => value === "/management/staff", StaffManagementPage.preload],
     [(value) => value === "/management/admin-review", AdminReviewPage.preload],
     [(value) => value === "/settings/system-diagnostics" || value === "/management/health", OpsHealthPage.preload],

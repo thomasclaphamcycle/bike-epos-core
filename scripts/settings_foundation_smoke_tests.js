@@ -66,6 +66,31 @@ const SETTINGS_KEYS = [
   "store.longitude",
   "pos.defaultTaxRatePercent",
   "pos.barcodeSearchAutoFocus",
+  "pos.defaultSaleType",
+  "pos.defaultCustomerType",
+  "pos.newBasketMode",
+  "pos.requireCustomerBeforeCheckout",
+  "pos.allowZeroPriceLines",
+  "pos.allowNegativeDiscounts",
+  "pos.managerApprovalForDiscounts",
+  "pos.managerApprovalForRefunds",
+  "pos.managerApprovalForVoids",
+  "pos.autoClearBasketAfterSale",
+  "pos.holdBasketTtlHours",
+  "pos.quoteExpiryDays",
+  "pos.requireLineNotes",
+  "pos.scanQuantityMode",
+  "pos.quickAddEnabled",
+  "pos.duplicateScanBehavior",
+  "pos.enabledTenderMethods",
+  "pos.splitPaymentsEnabled",
+  "pos.cashRoundingMode",
+  "pos.promptForReceiptAfterPayment",
+  "pos.requirePinForCheckout",
+  "pos.requireManagerOverrideForRestrictedActions",
+  "pos.tillLockTimeoutSeconds",
+  "pos.compactBasketView",
+  "pos.showKeyboardShortcutHints",
   "workshop.defaultJobDurationMinutes",
   "workshop.defaultDepositPence",
   "workshop.maxBookingsPerDay",
@@ -129,6 +154,32 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.store.latitude, null);
     assert.equal(defaultRes.json.settings.store.longitude, null);
     assert.equal(defaultRes.json.settings.pos.defaultTaxRatePercent, 20);
+    assert.equal(defaultRes.json.settings.pos.barcodeSearchAutoFocus, true);
+    assert.equal(defaultRes.json.settings.pos.defaultSaleType, "RETAIL");
+    assert.equal(defaultRes.json.settings.pos.defaultCustomerType, "WALK_IN");
+    assert.equal(defaultRes.json.settings.pos.newBasketMode, "RETAIL_WALK_IN");
+    assert.equal(defaultRes.json.settings.pos.requireCustomerBeforeCheckout, false);
+    assert.equal(defaultRes.json.settings.pos.allowZeroPriceLines, false);
+    assert.equal(defaultRes.json.settings.pos.allowNegativeDiscounts, false);
+    assert.equal(defaultRes.json.settings.pos.managerApprovalForDiscounts, true);
+    assert.equal(defaultRes.json.settings.pos.managerApprovalForRefunds, true);
+    assert.equal(defaultRes.json.settings.pos.managerApprovalForVoids, true);
+    assert.equal(defaultRes.json.settings.pos.autoClearBasketAfterSale, true);
+    assert.equal(defaultRes.json.settings.pos.holdBasketTtlHours, 24);
+    assert.equal(defaultRes.json.settings.pos.quoteExpiryDays, 30);
+    assert.equal(defaultRes.json.settings.pos.requireLineNotes, false);
+    assert.equal(defaultRes.json.settings.pos.scanQuantityMode, "INCREMENT_ONE");
+    assert.equal(defaultRes.json.settings.pos.quickAddEnabled, true);
+    assert.equal(defaultRes.json.settings.pos.duplicateScanBehavior, "INCREMENT_QUANTITY");
+    assert.deepEqual(defaultRes.json.settings.pos.enabledTenderMethods, ["CARD", "CASH"]);
+    assert.equal(defaultRes.json.settings.pos.splitPaymentsEnabled, true);
+    assert.equal(defaultRes.json.settings.pos.cashRoundingMode, "NONE");
+    assert.equal(defaultRes.json.settings.pos.promptForReceiptAfterPayment, true);
+    assert.equal(defaultRes.json.settings.pos.requirePinForCheckout, false);
+    assert.equal(defaultRes.json.settings.pos.requireManagerOverrideForRestrictedActions, true);
+    assert.equal(defaultRes.json.settings.pos.tillLockTimeoutSeconds, 300);
+    assert.equal(defaultRes.json.settings.pos.compactBasketView, false);
+    assert.equal(defaultRes.json.settings.pos.showKeyboardShortcutHints, true);
     assert.equal(defaultRes.json.settings.workshop.defaultJobDurationMinutes, 60);
     assert.equal(defaultRes.json.settings.workshop.defaultDepositPence, 1000);
     assert.equal(defaultRes.json.settings.workshop.maxBookingsPerDay, 8);
@@ -251,6 +302,31 @@ const run = async () => {
         pos: {
           defaultTaxRatePercent: 17.5,
           barcodeSearchAutoFocus: false,
+          defaultSaleType: "QUOTE",
+          defaultCustomerType: "PROFILE",
+          newBasketMode: "QUOTE",
+          requireCustomerBeforeCheckout: true,
+          allowZeroPriceLines: true,
+          allowNegativeDiscounts: true,
+          managerApprovalForDiscounts: false,
+          managerApprovalForRefunds: true,
+          managerApprovalForVoids: false,
+          autoClearBasketAfterSale: false,
+          holdBasketTtlHours: 72,
+          quoteExpiryDays: 14,
+          requireLineNotes: true,
+          scanQuantityMode: "PROMPT_QUANTITY",
+          quickAddEnabled: false,
+          duplicateScanBehavior: "PROMPT",
+          enabledTenderMethods: ["CARD", "CASH", "STORE_CREDIT", "BANK_TRANSFER"],
+          splitPaymentsEnabled: false,
+          cashRoundingMode: "NEAREST_5P",
+          promptForReceiptAfterPayment: false,
+          requirePinForCheckout: true,
+          requireManagerOverrideForRestrictedActions: false,
+          tillLockTimeoutSeconds: 120,
+          compactBasketView: true,
+          showKeyboardShortcutHints: false,
         },
         workshop: {
           defaultJobDurationMinutes: 75,
@@ -300,6 +376,36 @@ const run = async () => {
     assert.equal(patchRes.json.settings.store.longitude, -0.1477);
     assert.equal(patchRes.json.settings.pos.defaultTaxRatePercent, 17.5);
     assert.equal(patchRes.json.settings.pos.barcodeSearchAutoFocus, false);
+    assert.equal(patchRes.json.settings.pos.defaultSaleType, "QUOTE");
+    assert.equal(patchRes.json.settings.pos.defaultCustomerType, "PROFILE");
+    assert.equal(patchRes.json.settings.pos.newBasketMode, "QUOTE");
+    assert.equal(patchRes.json.settings.pos.requireCustomerBeforeCheckout, true);
+    assert.equal(patchRes.json.settings.pos.allowZeroPriceLines, true);
+    assert.equal(patchRes.json.settings.pos.allowNegativeDiscounts, true);
+    assert.equal(patchRes.json.settings.pos.managerApprovalForDiscounts, false);
+    assert.equal(patchRes.json.settings.pos.managerApprovalForRefunds, true);
+    assert.equal(patchRes.json.settings.pos.managerApprovalForVoids, false);
+    assert.equal(patchRes.json.settings.pos.autoClearBasketAfterSale, false);
+    assert.equal(patchRes.json.settings.pos.holdBasketTtlHours, 72);
+    assert.equal(patchRes.json.settings.pos.quoteExpiryDays, 14);
+    assert.equal(patchRes.json.settings.pos.requireLineNotes, true);
+    assert.equal(patchRes.json.settings.pos.scanQuantityMode, "PROMPT_QUANTITY");
+    assert.equal(patchRes.json.settings.pos.quickAddEnabled, false);
+    assert.equal(patchRes.json.settings.pos.duplicateScanBehavior, "PROMPT");
+    assert.deepEqual(patchRes.json.settings.pos.enabledTenderMethods, [
+      "CARD",
+      "CASH",
+      "STORE_CREDIT",
+      "BANK_TRANSFER",
+    ]);
+    assert.equal(patchRes.json.settings.pos.splitPaymentsEnabled, false);
+    assert.equal(patchRes.json.settings.pos.cashRoundingMode, "NEAREST_5P");
+    assert.equal(patchRes.json.settings.pos.promptForReceiptAfterPayment, false);
+    assert.equal(patchRes.json.settings.pos.requirePinForCheckout, true);
+    assert.equal(patchRes.json.settings.pos.requireManagerOverrideForRestrictedActions, false);
+    assert.equal(patchRes.json.settings.pos.tillLockTimeoutSeconds, 120);
+    assert.equal(patchRes.json.settings.pos.compactBasketView, true);
+    assert.equal(patchRes.json.settings.pos.showKeyboardShortcutHints, false);
     assert.equal(patchRes.json.settings.workshop.defaultJobDurationMinutes, 75);
     assert.equal(patchRes.json.settings.workshop.defaultDepositPence, 1500);
     assert.equal(patchRes.json.settings.workshop.maxBookingsPerDay, 9);
@@ -328,6 +434,7 @@ const run = async () => {
     const persistedRes = await fetchJson("/api/settings", { headers: MANAGER_HEADERS });
     assert.equal(persistedRes.status, 200, JSON.stringify(persistedRes.json));
     assert.equal(persistedRes.json.settings.store.name, "CorePOS Cycles");
+    assert.equal(persistedRes.json.settings.pos.newBasketMode, "QUOTE");
     assert.equal(persistedRes.json.settings.notifications.workshopAutoSendEnabled, false);
 
     const persistedPublicConfigRes = await fetchJson("/api/config", { headers: STAFF_HEADERS });
@@ -346,6 +453,8 @@ const run = async () => {
       "Pick a preferred workshop date and we will confirm the final slot after review.",
     );
     assert.equal(persistedPublicConfigRes.json.config.operations.dashboardWeatherEnabled, false);
+    assert.equal(persistedPublicConfigRes.json.config.pos.defaultSaleType, "QUOTE");
+    assert.equal(persistedPublicConfigRes.json.config.pos.compactBasketView, true);
     assert.equal("commercialSuggestionsEnabled" in persistedPublicConfigRes.json.config.workshop, false);
 
     const storeInfoRes = await fetchJson("/api/settings/store-info", { headers: ADMIN_HEADERS });

@@ -117,6 +117,8 @@ test("React POS checkout opens a printable thermal receipt page", async ({ page,
   await expect(page.getByTestId("pos-product-search")).toHaveValue("");
 
   await page.getByTestId("pos-checkout-basket").click();
+  await page.getByTestId("pos-confirm-card-payment").click();
+  await expect(page.getByTestId("pos-complete-sale")).toBeEnabled();
   await page.getByTestId("pos-complete-sale").click();
   await expect(page.getByText("Sale complete.")).toBeVisible();
 
