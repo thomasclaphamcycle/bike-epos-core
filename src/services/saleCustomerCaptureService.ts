@@ -10,6 +10,7 @@ import {
 } from "./receiptPrintStationService";
 
 const CUSTOMER_CAPTURE_SESSION_TTL_MINUTES = 15;
+const CUSTOMER_CAPTURE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32}$/;
 
 type CaptureSessionStatus = "ACTIVE" | "COMPLETED" | "EXPIRED";
 type CustomerMatchType = "email" | "phone" | "created";
@@ -74,6 +75,15 @@ const normalizePhone = (value: string | undefined | null) => {
 };
 
 const createSecureToken = () => crypto.randomBytes(24).toString("base64url");
+
+const normalizeCustomerCaptureToken = (token: string) => {
+  const normalized = token.trim();
+  if (!CUSTOMER_CAPTURE_TOKEN_PATTERN.test(normalized)) {
+    throw new HttpError(404, "Customer capture session not found", "CUSTOMER_CAPTURE_NOT_FOUND");
+  }
+
+  return normalized;
+};
 
 const toPublicPath = (token: string) => `/customer-capture/${encodeURIComponent(token)}`;
 
@@ -227,8 +237,9 @@ const expireSessionIfNeededTx = async (
 };
 
 const getSessionByTokenOrThrowTx = async (tx: Prisma.TransactionClient, token: string) => {
+  const normalizedToken = normalizeCustomerCaptureToken(token);
   const session = await tx.saleCustomerCaptureSession.findUnique({
-    where: { token },
+    where: { token: normalizedToken },
     select: {
       id: true,
       saleId: true,
@@ -770,6 +781,7 @@ export const getPublicCustomerCaptureStationEntry = async (station: string) =>
     const session = await tx.saleCustomerCaptureSession.findFirst({
       where: {
         stationKey: normalizedStationKey,
+        status: "ACTIVE",
       },
       orderBy: [{ createdAt: "desc" }],
       select: selectSessionForPayload,
@@ -860,6 +872,49 @@ export const submitPublicSaleCustomerCapture = async (
       phone,
     });
 
+    const completedAt = new Date();
+    const updatedSession = {
+      saleId: session.saleId,
+      basketId: session.basketId,
+      status: "COMPLETED" as const,
+      expiresAt: session.expiresAt,
+      completedAt,
+    };
+    const completedSession = await tx.saleCustomerCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        status: "ACTIVE",
+      },
+      data: {
+        status: "COMPLETED",
+        matchType: matchType.toUpperCase() as "EMAIL" | "PHONE" | "CREATED",
+        completedAt,
+        submittedFirstName: firstName,
+        submittedLastName: lastName,
+        submittedEmail: email ?? null,
+        submittedPhone: phone ?? null,
+        emailMarketingConsent: input.emailMarketingConsent ?? false,
+        smsMarketingConsent: input.smsMarketingConsent ?? false,
+        customerId: customer.id,
+      },
+    });
+
+    if (completedSession.count !== 1) {
+      await writeCaptureAudit({
+        sessionId: session.id,
+        action: "customer_capture.submit_rejected",
+        metadata: {
+          ...getOwnerMetadata(session),
+          reason: "already_completed",
+        },
+      });
+      throw new HttpError(
+        409,
+        "This customer capture link has already been used",
+        "CUSTOMER_CAPTURE_COMPLETED",
+      );
+    }
+
     if (session.saleId) {
       await tx.sale.update({
         where: { id: session.saleId },
@@ -886,30 +941,6 @@ export const submitPublicSaleCustomerCapture = async (
         });
       }
     }
-
-    const completedAt = new Date();
-    const updatedSession = await tx.saleCustomerCaptureSession.update({
-      where: { id: session.id },
-      data: {
-        status: "COMPLETED",
-        matchType: matchType.toUpperCase() as "EMAIL" | "PHONE" | "CREATED",
-        completedAt,
-        submittedFirstName: firstName,
-        submittedLastName: lastName,
-        submittedEmail: email ?? null,
-        submittedPhone: phone ?? null,
-        emailMarketingConsent: input.emailMarketingConsent ?? false,
-        smsMarketingConsent: input.smsMarketingConsent ?? false,
-        customerId: customer.id,
-      },
-      select: {
-        saleId: true,
-        basketId: true,
-        status: true,
-        expiresAt: true,
-        completedAt: true,
-      },
-    });
 
     await writeCaptureAuditTx(tx, {
       sessionId: session.id,

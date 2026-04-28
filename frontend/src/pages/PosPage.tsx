@@ -222,6 +222,7 @@ export const PosPage = () => {
   const productResultRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const newCustomerNameInputRef = useRef<HTMLInputElement | null>(null);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
   const pendingQuerySyncFrameRef = useRef<number | null>(null);
@@ -242,6 +243,7 @@ export const PosPage = () => {
   const [customerResults, setCustomerResults] = useState<CustomerSearchRow[]>([]);
   const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
+  const [customerOptionsOpen, setCustomerOptionsOpen] = useState(false);
   const [customerProfileModalOpen, setCustomerProfileModalOpen] = useState(false);
   const [contextCustomerId, setContextCustomerId] = useState<string | null>(null);
   const [customerLoading, setCustomerLoading] = useState(false);
@@ -950,6 +952,7 @@ export const PosPage = () => {
     setCustomerSearchText("");
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
+    setCustomerOptionsOpen(false);
     setShowCreateCustomer(false);
 
     if (sale?.sale.id) {
@@ -1015,6 +1018,7 @@ export const PosPage = () => {
     setCustomerSearchText("");
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
+    setCustomerOptionsOpen(false);
     setShowCreateCustomer(false);
   };
 
@@ -1024,6 +1028,42 @@ export const PosPage = () => {
     }
 
     setCustomerProfileModalOpen(true);
+  };
+
+  const editPaymentCustomer = () => {
+    setCustomerOptionsOpen((current) => !current);
+  };
+
+  const chooseWalkInCustomer = async () => {
+    setShowCreateCustomer(false);
+    if (selectedCustomer?.id) {
+      await clearSelectedCustomer();
+      return;
+    }
+
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setHighlightedCustomerIndex(-1);
+    setCustomerOptionsOpen(false);
+  };
+
+  const chooseLinkedCustomer = () => {
+    setShowCreateCustomer(false);
+    setCustomerOptionsOpen(false);
+    focusCustomerSearch();
+  };
+
+  const chooseTapCustomer = () => {
+    setCustomerOptionsOpen(false);
+    void createCustomerCaptureSession();
+  };
+
+  const chooseNewCustomer = () => {
+    setShowCreateCustomer(true);
+    setCustomerOptionsOpen(false);
+    window.requestAnimationFrame(() => {
+      newCustomerNameInputRef.current?.focus();
+    });
   };
 
   const createCustomerAndSelect = async () => {
@@ -1466,14 +1506,15 @@ export const PosPage = () => {
     ].filter((group) => group.items.length > 0);
   }, [basket?.items]);
   const contextHeaderTitle = saleContext.type === "WORKSHOP"
-    ? `Workshop Job #${saleContext.jobId}`
-    : "New Sale";
+    ? "Workshop Sale"
+    : "Retail Sale";
   const contextHeaderMeta = saleContext.type === "WORKSHOP"
     ? [
+        `Job #${saleContext.jobId}`,
         saleContext.customerName,
         saleContext.bikeLabel,
       ].filter(Boolean).join(" | ")
-    : "Retail sale";
+    : null;
   const searchResultSummary = searchText.trim()
     ? `${searchRows.length} result${searchRows.length === 1 ? "" : "s"}`
     : "";
@@ -1482,6 +1523,15 @@ export const PosPage = () => {
     || selectedCustomer?.name
     || (saleContext.type === "WORKSHOP" ? saleContext.customerName : null)
     || "Walk-in";
+  const activeSourceLabel = contextHeaderTitle;
+  const activeSourceDetail = saleContext.type === "WORKSHOP"
+    ? `Job #${saleContext.jobId}`
+    : null;
+  const activeCustomerStatusLabel = selectedCustomer
+    ? "Linked profile"
+    : saleContext.type === "WORKSHOP" && saleContext.customerName
+      ? "Workshop contact"
+      : "No profile attached";
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
@@ -1565,7 +1615,9 @@ export const PosPage = () => {
                 <div className="pos-context-header" data-testid="pos-context-header">
                   <div className="pos-context-copy">
                     <div className="table-primary pos-context-title">{contextHeaderTitle}</div>
-                    <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
+                    {contextHeaderMeta ? (
+                      <div className="muted-text pos-context-meta">{contextHeaderMeta}</div>
+                    ) : null}
                   </div>
                   {saleContext.type === "WORKSHOP" ? (
                     <div className="pos-context-totals">
@@ -1924,9 +1976,7 @@ export const PosPage = () => {
                     <span className="selected-customer-panel__action">View details</span>
                   </div>
                 </div>
-              ) : (
-                <p className="muted-text">No customer attached yet. This basket stays as walk-in until you add one.</p>
-              )}
+              ) : null}
 
               <PosCustomerCapturePanel
                 target={customerCaptureTarget}
@@ -2047,6 +2097,7 @@ export const PosPage = () => {
                     <label>
                       Name
                       <input
+                        ref={newCustomerNameInputRef}
                         value={newCustomerName}
                         onChange={(event) => setNewCustomerName(event.target.value)}
                         placeholder="Customer name"
@@ -2175,9 +2226,24 @@ export const PosPage = () => {
                     <strong>{formatMoney(payablePence)}</strong>
                   </div>
                   <div>
+                    <span className="muted-text">Source</span>
+                    <strong>{activeSourceLabel}</strong>
+                    {activeSourceDetail ? (
+                      <span className="pos-payment-summary-note">{activeSourceDetail}</span>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="pos-payment-summary-customer"
+                    onClick={editPaymentCustomer}
+                    aria-expanded={customerOptionsOpen}
+                    aria-controls="pos-customer-options-panel"
+                    aria-label={`Edit customer. Current customer: ${activeCustomerName}`}
+                  >
                     <span className="muted-text">Customer</span>
                     <strong>{activeCustomerName}</strong>
-                  </div>
+                    <span className="pos-payment-summary-note">{activeCustomerStatusLabel}</span>
+                  </button>
                 </div>
               ) : (
                 <div className="pos-payment-summary pos-payment-summary-retail">
@@ -2190,15 +2256,64 @@ export const PosPage = () => {
                     <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
                   </div>
                   <div>
-                    <span className="muted-text">Lines</span>
-                    <strong>{sale ? sale.saleItems.length : basketLineCount}</strong>
+                    <span className="muted-text">Source</span>
+                    <strong>{activeSourceLabel}</strong>
+                    {activeSourceDetail ? (
+                      <span className="pos-payment-summary-note">{activeSourceDetail}</span>
+                    ) : null}
                   </div>
-                  <div>
+                  <button
+                    type="button"
+                    className="pos-payment-summary-customer"
+                    onClick={editPaymentCustomer}
+                    aria-expanded={customerOptionsOpen}
+                    aria-controls="pos-customer-options-panel"
+                    aria-label={`Edit customer. Current customer: ${activeCustomerName}`}
+                  >
                     <span className="muted-text">Customer</span>
                     <strong>{activeCustomerName}</strong>
-                  </div>
+                    <span className="pos-payment-summary-note">{activeCustomerStatusLabel}</span>
+                  </button>
                 </div>
               )}
+
+              {customerOptionsOpen ? (
+                <div className="pos-customer-options-panel" id="pos-customer-options-panel">
+                  <button
+                    type="button"
+                    className={!selectedCustomer ? "pos-customer-option pos-customer-option-active" : "pos-customer-option"}
+                    onClick={() => void chooseWalkInCustomer()}
+                  >
+                    <span>Walk-in</span>
+                    <strong>No profile attached</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={selectedCustomer ? "pos-customer-option pos-customer-option-active" : "pos-customer-option"}
+                    onClick={chooseLinkedCustomer}
+                  >
+                    <span>Linked customer</span>
+                    <strong>Search existing profile</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-customer-option"
+                    onClick={chooseTapCustomer}
+                    disabled={!isCaptureEligible || creatingCaptureSession}
+                  >
+                    <span>Tap customer</span>
+                    <strong>{creatingCaptureSession ? "Starting..." : "NFC capture flow"}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-customer-option"
+                    onClick={chooseNewCustomer}
+                  >
+                    <span>New customer</span>
+                    <strong>Quick create profile</strong>
+                  </button>
+                </div>
+              ) : null}
 
               {sale ? (
                 <>
@@ -2272,11 +2387,7 @@ export const PosPage = () => {
                     </div>
                   ) : null}
                 </>
-              ) : (
-                <div className="pos-ready-note">
-                  <strong>Checkout to continue</strong>
-                </div>
-              )}
+              ) : null}
 
               <div className="actions-inline pos-payment-actions">
                 {sale ? (

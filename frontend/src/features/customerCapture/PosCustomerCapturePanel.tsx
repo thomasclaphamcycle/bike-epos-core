@@ -83,7 +83,7 @@ export const PosCustomerCapturePanel = ({
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
   const timeLeftLabel =
-    formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "left" }) ?? "timing unavailable";
+    formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "remaining" }) ?? "timing unavailable";
   const liveSessionWaiting = captureSession?.status === "ACTIVE" && Boolean(captureUrl);
 
   let stageTone: CaptureVisualTone = "ready";

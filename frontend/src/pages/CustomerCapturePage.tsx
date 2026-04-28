@@ -271,7 +271,7 @@ export const CustomerCapturePage = () => {
           <p className="muted-text">
             {isWaitingForEntrySession
               ? "Staff will start a live tap request on the till when they are ready for your details."
-              : `This takes under a minute. Enter your name and at least one contact method so staff can attach it to today&apos;s ${contextLabel}.`}
+              : `This takes under a minute. Enter your name and at least one contact method so staff can attach it to today's ${contextLabel}.`}
           </p>
         </div>
 
