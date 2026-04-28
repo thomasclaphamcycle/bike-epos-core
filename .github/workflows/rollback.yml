@@ -83,7 +83,7 @@ jobs:
             & $pm2Cmd list
             foreach ($processName in @("corepos-backend", "corepos-frontend", "cloudflared")) {
               Write-Host ""
-              Write-Host "PM2 describe $processName:"
+              Write-Host "PM2 describe ${processName}:"
               & $pm2Cmd describe $processName
               Write-Host ""
               Write-Host "PM2 logs $processName (last 120 lines):"

@@ -1814,20 +1814,8 @@ export const PosPage = () => {
                 </div>
 
                 <div className="pos-meta-strip" aria-label="POS sale metadata">
-                  <button
-                    type="button"
-                    className="pos-meta-action"
-                    onClick={() => {
-                      setCompletedSale(null);
-                      setSelectedTenderMethod(defaultTenderMethod);
-                      setCashTenderedAmount("");
-                      void createBasket();
-                    }}
-                  >
-                    New Sale
-                  </button>
                   <span className="pos-meta-shortcuts">
-                    <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F4</kbd> new sale <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
+                    <kbd>/</kbd> search <kbd>F2</kbd> customer <kbd>F8</kbd> checkout <kbd>F9</kbd> complete
                   </span>
                 </div>
               </div>
