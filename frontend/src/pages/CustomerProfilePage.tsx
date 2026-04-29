@@ -29,6 +29,10 @@ type Customer = {
   lastName: string;
   email: string | null;
   phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
   emailAllowed: boolean;
   smsAllowed: boolean;
   whatsappAllowed: boolean;
@@ -50,6 +54,18 @@ type CustomerCommunicationPreferences = Pick<
   Customer,
   "emailAllowed" | "smsAllowed" | "whatsappAllowed"
 >;
+
+type CustomerProfileFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  postcode: string;
+  notes: string;
+};
 
 type CustomerSales = {
   sales: Array<{
@@ -290,6 +306,18 @@ const formatOptionalDate = (value: string | null | undefined) =>
 const truncateText = (value: string, limit = 120) =>
   value.length > limit ? `${value.slice(0, limit - 1).trimEnd()}...` : value;
 
+const createEmptyCustomerProfileForm = (): CustomerProfileFormState => ({
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  postcode: "",
+  notes: "",
+});
+
 const createEmptyBikeForm = (): BikeProfileFormState => ({
   label: "",
   make: "",
@@ -308,6 +336,29 @@ const createEmptyBikeForm = (): BikeProfileFormState => ({
   registrationNumber: "",
   notes: "",
 });
+
+const toCustomerProfileForm = (customer: Customer): CustomerProfileFormState => ({
+  firstName: customer.firstName,
+  lastName: customer.lastName,
+  email: customer.email ?? "",
+  phone: customer.phone ?? "",
+  addressLine1: customer.addressLine1 ?? "",
+  addressLine2: customer.addressLine2 ?? "",
+  city: customer.city ?? "",
+  postcode: customer.postcode ?? "",
+  notes: customer.notes ?? "",
+});
+
+const formatCustomerAddress = (customer: Customer) =>
+  [
+    customer.addressLine1,
+    customer.addressLine2,
+    customer.city,
+    customer.postcode,
+  ]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(", ");
 
 const toDateInputValue = (value: string | Date | null | undefined) => {
   if (!value) {
@@ -426,6 +477,17 @@ type CustomerProfilePageProps = {
   embedded?: boolean;
 };
 
+type CustomerProfileView = "overview" | "bikes" | "sales" | "workshop" | "rental" | "timeline";
+
+const CUSTOMER_PROFILE_VIEWS: Array<{ key: CustomerProfileView; label: string }> = [
+  { key: "overview", label: "Overview" },
+  { key: "bikes", label: "Bikes" },
+  { key: "sales", label: "Sales" },
+  { key: "workshop", label: "Workshop" },
+  { key: "rental", label: "Rental" },
+  { key: "timeline", label: "Timeline" },
+];
+
 export const CustomerProfilePage = ({
   customerId: customerIdOverride,
   embedded = false,
@@ -442,13 +504,19 @@ export const CustomerProfilePage = ({
   const [communicationPreferences, setCommunicationPreferences] =
     useState<CustomerCommunicationPreferences | null>(null);
   const [loading, setLoading] = useState(false);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState<CustomerProfileFormState>(
+    () => createEmptyCustomerProfileForm(),
+  );
+  const [profileFormError, setProfileFormError] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [savingCommunicationPreferences, setSavingCommunicationPreferences] = useState(false);
   const [bikeEditorMode, setBikeEditorMode] = useState<"create" | "edit" | null>(null);
   const [editingBikeId, setEditingBikeId] = useState<string | null>(null);
   const [bikeForm, setBikeForm] = useState<BikeProfileFormState>(() => createEmptyBikeForm());
   const [bikeFormError, setBikeFormError] = useState<string | null>(null);
   const [savingBikeProfile, setSavingBikeProfile] = useState(false);
-  const [activityTab, setActivityTab] = useState<"overview" | "timeline">("overview");
+  const [profileView, setProfileView] = useState<CustomerProfileView>("overview");
   const [scheduleEditorMode, setScheduleEditorMode] = useState<"create" | "edit" | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [scheduleForm, setScheduleForm] = useState<BikeServiceScheduleFormState>(
@@ -504,6 +572,9 @@ export const CustomerProfilePage = ({
         apiGet<CustomerHireBookingsResponse>(`/api/hire/bookings?customerId=${encodeURIComponent(id)}&take=20`),
       ]);
       setCustomer(customerPayload);
+      if (!profileEditorOpen) {
+        setProfileForm(toCustomerProfileForm(customerPayload));
+      }
       setCommunicationPreferences({
         emailAllowed: customerPayload.emailAllowed,
         smsAllowed: customerPayload.smsAllowed,
@@ -512,7 +583,13 @@ export const CustomerProfilePage = ({
       setSales(salesPayload.sales || []);
       setJobs(jobsPayload.workshopJobs || jobsPayload.jobs || []);
       setBikes(bikesPayload.bikes || []);
-      setHireBookings(hirePayload.bookings || []);
+      const loadedHireBookings = hirePayload.bookings || [];
+      setHireBookings(loadedHireBookings);
+      if (
+        loadedHireBookings.some((booking) => booking.status === "RESERVED" || booking.status === "CHECKED_OUT")
+      ) {
+        setProfileView("rental");
+      }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load customer profile";
       error(message);
@@ -572,6 +649,73 @@ export const CustomerProfilePage = ({
     }
   };
 
+  const openProfileEditor = () => {
+    if (customer) {
+      setProfileForm(toCustomerProfileForm(customer));
+    }
+    setProfileFormError(null);
+    setProfileEditorOpen(true);
+  };
+
+  const closeProfileEditor = () => {
+    if (customer) {
+      setProfileForm(toCustomerProfileForm(customer));
+    } else {
+      setProfileForm(createEmptyCustomerProfileForm());
+    }
+    setProfileFormError(null);
+    setProfileEditorOpen(false);
+  };
+
+  const updateProfileForm = (field: keyof CustomerProfileFormState, value: string) => {
+    setProfileForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setProfileFormError(null);
+  };
+
+  const saveCustomerProfile = async () => {
+    if (!id) {
+      return;
+    }
+
+    if (!profileForm.firstName.trim()) {
+      setProfileFormError("First name is required.");
+      return;
+    }
+
+    setSavingProfile(true);
+    setProfileFormError(null);
+    try {
+      const updatedCustomer = await apiPatch<Customer>(
+        `/api/customers/${encodeURIComponent(id)}`,
+        {
+          firstName: profileForm.firstName,
+          lastName: profileForm.lastName,
+          email: profileForm.email,
+          phone: profileForm.phone,
+          addressLine1: profileForm.addressLine1,
+          addressLine2: profileForm.addressLine2,
+          city: profileForm.city,
+          postcode: profileForm.postcode,
+          notes: profileForm.notes,
+        },
+      );
+      setCustomer(updatedCustomer);
+      setProfileForm(toCustomerProfileForm(updatedCustomer));
+      setProfileEditorOpen(false);
+      success("Customer details saved.");
+    } catch (saveError) {
+      const message =
+        saveError instanceof Error ? saveError.message : "Failed to save customer details";
+      setProfileFormError(message);
+      error(message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   useEffect(() => {
     void loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -603,6 +747,7 @@ export const CustomerProfilePage = ({
   };
 
   const openCreateBikeEditor = () => {
+    setProfileView("bikes");
     setBikeEditorMode("create");
     setEditingBikeId(null);
     setBikeForm(createEmptyBikeForm());
@@ -939,165 +1084,288 @@ export const CustomerProfilePage = ({
     return <div className="page-shell"><p>Missing customer id.</p></div>;
   }
 
+  const customerPostalAddress = customer ? formatCustomerAddress(customer) : "";
+
   return (
     <div className={`page-shell${embedded ? " customer-profile-page-shell customer-profile-page-shell--embedded" : " customer-profile-page-shell"}`}>
-      <section className="card">
+      <section className="card customer-profile-shell-card">
         <div className="card-header-row">
           <h1>Customer Profile</h1>
-          {!embedded ? <Link to="/customers">Back to Customers</Link> : null}
+          {!embedded ? (
+            <Link to="/customers" className="customer-profile-back-link">
+              Customer list
+            </Link>
+          ) : null}
         </div>
 
         {loading ? <p>Loading...</p> : null}
 
         {customer ? (
           <>
-            <div className="customer-relationship-profile">
-              <div className="customer-relationship-profile__hero">
-                <div className="customer-relationship-profile__identity">
+            <div className="customer-profile-masthead">
+              <div className="customer-profile-masthead__main">
+                <div className="customer-profile-masthead__identity">
                   <span className="bike-service-profile__eyebrow">Customer workspace</span>
                   <div className="bike-service-profile__title-row">
                     <h2 style={{ margin: 0 }}>{customer.name}</h2>
                     <span className="bike-service-profile__status bike-service-profile__status--calm">
-                      Relationship history
+                      {customer.summary?.linkedBikeCount ?? bikes.length} bikes linked
                     </span>
                   </div>
-                  <div className="bike-service-profile__highlights">
-                    <span>{customer.email || "No email recorded"}</span>
-                    <span>{customer.phone || "No phone recorded"}</span>
-                    <span>
-                      Last activity {formatOptionalDate(customer.summary?.mostRecentActivityAt ?? customer.updatedAt)}
-                    </span>
+                  <div className="customer-profile-contact-panel">
+                    <div className="customer-profile-contact-panel__header">
+                      <strong>Contact details</strong>
+                      <button
+                        type="button"
+                        className="customer-profile-edit-contact-button"
+                        onClick={openProfileEditor}
+                      >
+                        Edit contact details
+                      </button>
+                    </div>
+                    <div className="customer-profile-contact-grid">
+                      <div className="customer-profile-contact-card">
+                        <span>Email</span>
+                        <strong>{customer.email || "No email recorded"}</strong>
+                      </div>
+                      <div className="customer-profile-contact-card">
+                        <span>Phone</span>
+                        <strong>{customer.phone || "No phone recorded"}</strong>
+                      </div>
+                      <div className="customer-profile-contact-card">
+                        <span>Postcode</span>
+                        <strong>{customer.postcode || "No postcode recorded"}</strong>
+                      </div>
+                      <div className="customer-profile-contact-card customer-profile-contact-card--wide">
+                        <span>Postal address</span>
+                        <strong>{customerPostalAddress || "No address recorded"}</strong>
+                      </div>
+                    </div>
                   </div>
-                  <p className="bike-service-profile__status-detail">
-                    {customer.notes || "Keep finalized sales, active workshop work, bikes, and customer communication history in one place."}
-                  </p>
+                  {customer.notes ? (
+                    <p className="bike-service-profile__status-detail">{customer.notes}</p>
+                  ) : null}
                 </div>
-                <div className="bike-service-profile__actions">
-                  <div className="actions-inline">
-                    <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>
-                      Attach To Active POS Sale
-                    </button>
-                    <Link to={`/customers/${customer.id}/timeline`} className="button-link">
-                      Open Timeline
-                    </Link>
-                  </div>
-                  <p className="muted-text" style={{ margin: "10px 0 0" }}>
-                    {activeSaleId ? `Active sale: ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
-                  </p>
+
+                <div className="customer-profile-primary-actions">
+                  <button type="button" onClick={attachToActiveSale} disabled={!activeSaleId}>
+                    Attach to POS
+                  </button>
+                  <button type="button" className="primary" onClick={openCreateBikeEditor}>
+                    Add bike
+                  </button>
                 </div>
               </div>
 
-              <div className="bike-service-profile__metrics">
-                <div className="customer-booking-summary-card customer-booking-summary-card--highlight">
-                  <span>Completed sales</span>
-                  <strong>{customer.summary?.completedSalesCount ?? sales.length}</strong>
-                  <p>Finalized customer-linked sales only.</p>
-                </div>
-                <div className="customer-booking-summary-card">
-                  <span>Finalized spend</span>
-                  <strong>{formatMoney(customer.summary?.finalizedSpendPence ?? 0)}</strong>
-                  <p>Conservative total from completed sales only.</p>
-                </div>
-                <div className="customer-booking-summary-card">
-                  <span>Active workshop</span>
-                  <strong>{customer.summary?.activeWorkshopJobsCount ?? activeWorkshopJobs.length}</strong>
-                  <p>Booked, in progress, or ready-for-collection jobs.</p>
-                </div>
-                <div className="customer-booking-summary-card">
-                  <span>Linked bikes</span>
-                  <strong>{customer.summary?.linkedBikeCount ?? bikes.length}</strong>
-                  <p>Reusable bike records attached to this customer.</p>
-                </div>
-                <div className="customer-booking-summary-card">
-                  <span>Most recent activity</span>
-                  <strong className="bike-service-profile__metric-value--compact">
-                    {formatOptionalDate(customer.summary?.mostRecentActivityAt ?? customer.updatedAt)}
-                  </strong>
-                  <p>
-                    {customer.summary?.lastSaleAt
-                      ? `Last sale ${formatOptionalDate(customer.summary.lastSaleAt)}`
-                      : customer.summary?.lastWorkshopActivityAt
-                        ? `Workshop updated ${formatOptionalDate(customer.summary.lastWorkshopActivityAt)}`
-                        : "No completed sales or workshop updates yet."}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {communicationPreferences ? (
-              <div style={{ marginTop: "16px" }}>
-                <h2 style={{ fontSize: "1rem", marginBottom: "8px" }}>Workshop Updates</h2>
-                <p className="muted-text">
-                  Staff-controlled permissions for operational quote, collection, and workshop updates.
-                </p>
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "10px",
-                    marginTop: "12px",
-                  }}
-                >
-                  <label className="staff-toggle">
-                    <input
-                      type="checkbox"
-                      checked={communicationPreferences.emailAllowed}
-                      disabled={savingCommunicationPreferences}
-                      onChange={(event) =>
-                        updateCommunicationPreference("emailAllowed", event.target.checked)
-                      }
-                    />
-                    <span>Email updates</span>
-                  </label>
-                  <label className="staff-toggle">
-                    <input
-                      type="checkbox"
-                      checked={communicationPreferences.smsAllowed}
-                      disabled={savingCommunicationPreferences}
-                      onChange={(event) =>
-                        updateCommunicationPreference("smsAllowed", event.target.checked)
-                      }
-                    />
-                    <span>SMS updates</span>
-                  </label>
-                  <label className="staff-toggle">
-                    <input
-                      type="checkbox"
-                      checked={communicationPreferences.whatsappAllowed}
-                      disabled={savingCommunicationPreferences}
-                      onChange={(event) =>
-                        updateCommunicationPreference("whatsappAllowed", event.target.checked)
-                      }
-                    />
-                    <span>WhatsApp updates</span>
-                  </label>
-                </div>
-                <div className="actions-inline" style={{ marginTop: "10px" }}>
+              {communicationPreferences ? (
+                <aside className="customer-profile-side-panel">
+                  <div className="customer-profile-side-panel__header">
+                    <strong>Contact permissions</strong>
+                    <span className={communicationPreferencesDirty ? "status-badge status-warning" : "status-badge"}>
+                      {communicationPreferencesDirty ? "Unsaved" : "Saved"}
+                    </span>
+                  </div>
+                  <div className="customer-profile-comm-grid">
+                    <label className="staff-toggle">
+                      <input
+                        type="checkbox"
+                        checked={communicationPreferences.emailAllowed}
+                        disabled={savingCommunicationPreferences}
+                        onChange={(event) =>
+                          updateCommunicationPreference("emailAllowed", event.target.checked)
+                        }
+                      />
+                      <span>Email</span>
+                    </label>
+                    <label className="staff-toggle">
+                      <input
+                        type="checkbox"
+                        checked={communicationPreferences.smsAllowed}
+                        disabled={savingCommunicationPreferences}
+                        onChange={(event) =>
+                          updateCommunicationPreference("smsAllowed", event.target.checked)
+                        }
+                      />
+                      <span>SMS</span>
+                    </label>
+                    <label className="staff-toggle">
+                      <input
+                        type="checkbox"
+                        checked={communicationPreferences.whatsappAllowed}
+                        disabled={savingCommunicationPreferences}
+                        onChange={(event) =>
+                          updateCommunicationPreference("whatsappAllowed", event.target.checked)
+                        }
+                      />
+                      <span>WhatsApp</span>
+                    </label>
+                  </div>
                   <button
                     type="button"
                     onClick={saveCommunicationPreferences}
                     disabled={!communicationPreferencesDirty || savingCommunicationPreferences}
                   >
-                    {savingCommunicationPreferences ? "Saving..." : "Save Communication Settings"}
+                    {savingCommunicationPreferences ? "Saving..." : "Save permissions"}
                   </button>
-                  <span className="muted-text">
-                    {communicationPreferencesDirty
-                      ? "Unsaved changes"
-                      : "Saved customer communication settings"}
-                  </span>
+                  <p className="muted-text">
+                    {activeSaleId ? `Active sale ${activeSaleId.slice(0, 8)}` : "No active POS sale in this browser."}
+                  </p>
+                </aside>
+              ) : null}
+            </div>
+
+            {profileEditorOpen ? (
+              <div className="customer-profile-editor">
+                <div className="card-header-row">
+                  <h3 style={{ margin: 0 }}>Edit contact and address</h3>
+                  <button type="button" onClick={closeProfileEditor} disabled={savingProfile}>
+                    Cancel
+                  </button>
+                </div>
+                <div className="customer-profile-editor-grid">
+                  <label>
+                    <span>First name</span>
+                    <input
+                      type="text"
+                      value={profileForm.firstName}
+                      onChange={(event) => updateProfileForm("firstName", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label>
+                    <span>Last name</span>
+                    <input
+                      type="text"
+                      value={profileForm.lastName}
+                      onChange={(event) => updateProfileForm("lastName", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={profileForm.email}
+                      onChange={(event) => updateProfileForm("email", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label>
+                    <span>Phone</span>
+                    <input
+                      type="tel"
+                      value={profileForm.phone}
+                      onChange={(event) => updateProfileForm("phone", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label className="customer-profile-editor-grid__wide">
+                    <span>Address line 1</span>
+                    <input
+                      type="text"
+                      value={profileForm.addressLine1}
+                      onChange={(event) => updateProfileForm("addressLine1", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label className="customer-profile-editor-grid__wide">
+                    <span>Address line 2</span>
+                    <input
+                      type="text"
+                      value={profileForm.addressLine2}
+                      onChange={(event) => updateProfileForm("addressLine2", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label>
+                    <span>Town / city</span>
+                    <input
+                      type="text"
+                      value={profileForm.city}
+                      onChange={(event) => updateProfileForm("city", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label>
+                    <span>Postcode</span>
+                    <input
+                      type="text"
+                      value={profileForm.postcode}
+                      onChange={(event) => updateProfileForm("postcode", event.target.value)}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                  <label className="customer-profile-editor-grid__wide">
+                    <span>Notes</span>
+                    <textarea
+                      value={profileForm.notes}
+                      onChange={(event) => updateProfileForm("notes", event.target.value)}
+                      rows={3}
+                      disabled={savingProfile}
+                    />
+                  </label>
+                </div>
+                {profileFormError ? (
+                  <p className="inventory-adjustment-validation">{profileFormError}</p>
+                ) : null}
+                <div className="actions-inline">
+                  <button type="button" className="primary" onClick={saveCustomerProfile} disabled={savingProfile}>
+                    {savingProfile ? "Saving..." : "Save customer details"}
+                  </button>
+                  <button type="button" onClick={closeProfileEditor} disabled={savingProfile}>
+                    Cancel
+                  </button>
                 </div>
               </div>
             ) : null}
+
+            <div className="customer-profile-metrics">
+              <button type="button" className="customer-profile-metric-card customer-profile-metric-card--highlight" onClick={() => setProfileView("sales")}>
+                  <span>Total spend</span>
+                  <strong>{formatMoney(customer.summary?.finalizedSpendPence ?? 0)}</strong>
+              </button>
+              <button type="button" className="customer-profile-metric-card" onClick={() => setProfileView("sales")}>
+                  <span>Completed sales</span>
+                  <strong>{customer.summary?.completedSalesCount ?? sales.length}</strong>
+              </button>
+              <button type="button" className="customer-profile-metric-card" onClick={() => setProfileView("workshop")}>
+                  <span>Active workshop</span>
+                  <strong>{customer.summary?.activeWorkshopJobsCount ?? activeWorkshopJobs.length}</strong>
+              </button>
+              <button type="button" className="customer-profile-metric-card" onClick={() => setProfileView("bikes")}>
+                  <span>Linked bikes</span>
+                  <strong>{customer.summary?.linkedBikeCount ?? bikes.length}</strong>
+              </button>
+              <button type="button" className="customer-profile-metric-card" onClick={() => setProfileView("rental")}>
+                  <span>Rental records</span>
+                  <strong>{hireBookings.length}</strong>
+              </button>
+            </div>
+
+            <div className="customer-profile-view-tabs" role="tablist" aria-label="Customer profile sections">
+              {CUSTOMER_PROFILE_VIEWS.map((view) => (
+                <button
+                  key={view.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={profileView === view.key}
+                  className={profileView === view.key ? "customer-profile-view-tab customer-profile-view-tab--active" : "customer-profile-view-tab"}
+                  onClick={() => setProfileView(view.key)}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+
           </>
         ) : null}
       </section>
 
-      <section className="card">
+      {profileView === "rental" ? (
+      <section className="card customer-profile-workspace-card">
         <div className="card-header-row">
           <div>
             <h2>Rental Activity</h2>
-            <p className="muted-text">
-              Keep active hires, recent returns, and issue notes attached to the customer relationship instead of leaving bike hire as a disconnected desk-only workflow.
-            </p>
           </div>
           <Link to="/rental/calendar" className="button-link">Open rental operations</Link>
         </div>
@@ -1107,9 +1375,6 @@ export const CustomerProfilePage = ({
             <div className="card-header-row">
               <div>
                 <h3 style={{ margin: 0 }}>Active rentals</h3>
-                <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                  Reserved and checked-out hires that still need pickup, return, or customer follow-up.
-                </p>
               </div>
             </div>
             <div className="timeline-list">
@@ -1151,9 +1416,6 @@ export const CustomerProfilePage = ({
             <div className="card-header-row">
               <div>
                 <h3 style={{ margin: 0 }}>Recent rental history</h3>
-                <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                  Return and cancellation notes stay visible so repeat rental issues are easy to spot during workshop or future booking conversations.
-                </p>
               </div>
             </div>
             <div className="timeline-list">
@@ -1189,116 +1451,94 @@ export const CustomerProfilePage = ({
           </div>
         </div>
       </section>
+      ) : null}
 
-      <section className="card">
+      {profileView === "bikes" ? (
+      <section className="card customer-profile-workspace-card">
         <div className="card-header-row">
           <div>
             <h2>Bike Records</h2>
-            <p className="muted-text">
-              Keep a reusable bike profile ready for service history, workshop intake, and quote context.
-            </p>
-          </div>
-          <div className="actions-inline">
-            <button type="button" onClick={openCreateBikeEditor}>
-              Add Bike Record
-            </button>
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Bike</th>
-                <th>Identity</th>
-                <th>Service Lifecycle</th>
-                <th>Linked Jobs</th>
-                <th>Latest Linked Service</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bikes.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>No bike records linked to this customer yet.</td>
-                </tr>
-              ) : (
-                bikes.map((bike) => (
-                  <tr key={bike.id}>
-                    <td>
-                      <div className="table-primary">
-                        <Link to={`/customers/bikes/${bike.id}`}>{bike.displayName}</Link>
-                      </div>
-                      <div className="table-secondary">
-                        {bike.notes || "Reusable bike record for workshop history and intake"}
-                      </div>
-                    </td>
-                    <td>
-                      {[bike.make, bike.model].filter(Boolean).join(" ") || "-"}
-                      <div className="table-secondary">
-                        {bike.registrationNumber || bike.frameNumber || bike.serialNumber || "No identifier recorded"}
-                      </div>
-                      <div className="table-secondary">{buildTechnicalSummary(bike)}</div>
-                      {hasEBikeDetails(bike) ? (
-                        <div className="table-secondary">{buildEBikeSummary(bike)}</div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {bike.serviceScheduleSummary.activeCount === 0 ? (
-                        <span className="table-secondary">No active service schedules</span>
-                      ) : (
-                        <div className="bike-service-schedule-inline-list">
-                          {bike.serviceSchedules
-                            .filter((schedule) => schedule.isActive)
-                            .slice(0, 2)
-                            .map((schedule) => (
-                              <div key={schedule.id} className="bike-service-schedule-inline-item">
-                                <div className="actions-inline">
-                                  <strong>{schedule.title}</strong>
-                                  <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
-                                    {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
-                                  </span>
-                                </div>
-                                <div className="table-secondary">{schedule.dueSummaryText}</div>
-                              </div>
-                            ))}
+        {bikes.length === 0 ? (
+          <div className="restricted-panel info-panel">
+            No bike records linked to this customer yet.
+          </div>
+        ) : (
+          <div className="customer-bike-card-grid">
+            {bikes.map((bike) => (
+              <article key={bike.id} className="customer-bike-card">
+                <div className="customer-bike-card__header">
+                  <div>
+                    <Link className="customer-bike-card__title" to={`/customers/bikes/${bike.id}`}>
+                      {bike.displayName}
+                    </Link>
+                    {bike.notes ? <p>{bike.notes}</p> : null}
+                  </div>
+                  <span className={bike.serviceScheduleSummary.overdueCount > 0 ? "status-badge status-warning" : "status-badge"}>
+                    {bike.serviceSummary.openJobCount} open jobs
+                  </span>
+                </div>
+
+                <div className="customer-bike-card__details">
+                  <div>
+                    <span>Identity</span>
+                    <strong>{[bike.make, bike.model].filter(Boolean).join(" ") || "Not recorded"}</strong>
+                    <small>{bike.registrationNumber || bike.frameNumber || bike.serialNumber || "No identifier recorded"}</small>
+                  </div>
+                  <div>
+                    <span>Profile</span>
+                    <strong>{buildTechnicalSummary(bike)}</strong>
+                    <small>{hasEBikeDetails(bike) ? buildEBikeSummary(bike) : "No e-bike details"}</small>
+                  </div>
+                  <div>
+                    <span>Service</span>
+                    <strong>
+                      {bike.serviceScheduleSummary.activeCount} active · {bike.serviceScheduleSummary.dueCount} due
+                    </strong>
+                    <small>{bike.serviceScheduleSummary.overdueCount} overdue · latest {formatOptionalDateTime(bike.serviceSummary.latestJobAt)}</small>
+                  </div>
+                </div>
+
+                {bike.serviceScheduleSummary.activeCount > 0 ? (
+                  <div className="customer-bike-card__schedule-list">
+                    {bike.serviceSchedules
+                      .filter((schedule) => schedule.isActive)
+                      .slice(0, 2)
+                      .map((schedule) => (
+                        <div key={schedule.id} className="customer-bike-card__schedule">
+                          <strong>{schedule.title}</strong>
+                          <span className={bikeServiceScheduleDueStatusClass(schedule.dueStatus)}>
+                            {bikeServiceScheduleDueStatusLabel(schedule.dueStatus)}
+                          </span>
+                          <small>{schedule.dueSummaryText}</small>
                         </div>
-                      )}
-                      <div className="table-secondary">
-                        {bike.serviceScheduleSummary.activeCount} active · {bike.serviceScheduleSummary.dueCount} due · {bike.serviceScheduleSummary.overdueCount} overdue
-                      </div>
-                      {bike.commercialInsights ? (
-                        <WorkshopCommercialInsightsPanel
-                          insights={bike.commercialInsights}
-                          title="Service prompt"
-                          description=""
-                          maxItems={1}
-                          compact
-                          dataTestId={`customer-bike-commercial-insights-${bike.id}`}
-                        />
-                      ) : null}
-                    </td>
-                    <td>
-                      {bike.serviceSummary.linkedJobCount}
-                      <div className="table-secondary">
-                        {bike.serviceSummary.openJobCount} open / {bike.serviceSummary.completedJobCount} completed
-                      </div>
-                    </td>
-                    <td>{formatOptionalDateTime(bike.serviceSummary.latestJobAt)}</td>
-                    <td>
-                      <div className="actions-inline">
-                        <Link to={`/customers/bikes/${bike.id}`}>Service History</Link>
-                        <button type="button" onClick={() => openEditBikeEditor(bike)}>
-                          View / Edit Profile
-                        </button>
-                        <Link to={`/workshop/check-in?bikeId=${encodeURIComponent(bike.id)}`}>Start Workshop Job</Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                      ))}
+                  </div>
+                ) : null}
+
+                {bike.commercialInsights ? (
+                  <WorkshopCommercialInsightsPanel
+                    insights={bike.commercialInsights}
+                    title="Service prompt"
+                    description=""
+                    maxItems={1}
+                    compact
+                    dataTestId={`customer-bike-commercial-insights-${bike.id}`}
+                  />
+                ) : null}
+
+                <div className="actions-inline customer-bike-card__actions">
+                  <Link to={`/customers/bikes/${bike.id}`}>Service History</Link>
+                  <button type="button" onClick={() => openEditBikeEditor(bike)}>
+                    View / Edit Profile
+                  </button>
+                  <Link to={`/workshop/check-in?bikeId=${encodeURIComponent(bike.id)}`}>Start Workshop Job</Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
         {bikeEditorMode ? (
           <div className="bike-profile-editor">
             <div className="card-header-row">
@@ -1306,9 +1546,6 @@ export const CustomerProfilePage = ({
                 <h3 style={{ margin: 0 }}>
                   {bikeEditorMode === "edit" ? "Edit Bike Profile" : "Add Bike Record"}
                 </h3>
-                <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                  Keep identity details compact, then add technical and e-bike data only where it helps workshop staff.
-                </p>
               </div>
               <div className="actions-inline">
                 {editingBike ? (
@@ -1507,9 +1744,6 @@ export const CustomerProfilePage = ({
                 <div className="card-header-row">
                   <div>
                     <h4>Service Lifecycle</h4>
-                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                      Track what is due next for this bike without guessing from old workshop lines.
-                    </p>
                   </div>
                   <div className="actions-inline">
                     <button type="button" onClick={openCreateScheduleEditor} disabled={savingSchedule}>
@@ -1639,9 +1873,6 @@ export const CustomerProfilePage = ({
                         <h4 style={{ margin: 0 }}>
                           {scheduleEditorMode === "edit" ? "Edit Service Schedule" : "Add Service Schedule"}
                         </h4>
-                        <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                          Keep schedules explicit so workshop staff can see what this bike is due for next.
-                        </p>
                       </div>
                       <button type="button" onClick={closeScheduleEditor} disabled={savingSchedule}>
                         Cancel
@@ -1782,7 +2013,7 @@ export const CustomerProfilePage = ({
               </div>
             ) : bikeEditorMode === "create" ? (
               <div className="restricted-panel">
-                Save the bike record first, then add service schedules for what this bike should be due next.
+                Save bike first to add schedules.
               </div>
             ) : null}
 
@@ -1805,47 +2036,40 @@ export const CustomerProfilePage = ({
           </div>
         ) : null}
       </section>
+      ) : null}
 
-      <section className="card">
+      {profileView === "overview" ? (
+      <section className="card customer-profile-workspace-card">
         <div className="card-header-row">
           <div>
-            <h2>Customer Activity</h2>
-            <p className="muted-text">
-              Keep the durable customer-linked domain timeline close to the sales and workshop summary.
-            </p>
-          </div>
-          <div className="workshop-job-status-panel__tabs" role="tablist" aria-label="Customer activity views">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activityTab === "overview"}
-              className={`workshop-job-status-panel__tab${activityTab === "overview" ? " workshop-job-status-panel__tab--active" : ""}`}
-              onClick={() => setActivityTab("overview")}
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activityTab === "timeline"}
-              className={`workshop-job-status-panel__tab${activityTab === "timeline" ? " workshop-job-status-panel__tab--active" : ""}`}
-              onClick={() => setActivityTab("timeline")}
-            >
-              Timeline
-            </button>
+            <h2>Overview</h2>
           </div>
         </div>
 
-        {activityTab === "overview" ? (
-          <>
+        <div className="customer-profile-overview-jump-grid">
+          <button type="button" onClick={() => setProfileView("bikes")}>
+            <strong>{bikes.length}</strong>
+            <span>Bike records</span>
+          </button>
+          <button type="button" onClick={() => setProfileView("sales")}>
+            <strong>{sales.length}</strong>
+            <span>Sales rows</span>
+          </button>
+          <button type="button" onClick={() => setProfileView("workshop")}>
+            <strong>{jobs.length}</strong>
+            <span>Workshop jobs</span>
+          </button>
+          <button type="button" onClick={() => setProfileView("rental")}>
+            <strong>{hireBookings.length}</strong>
+            <span>Rental bookings</span>
+          </button>
+        </div>
+
             <div className="customer-relationship-overview">
               <div className="customer-relationship-overview__section">
                 <div className="card-header-row">
                   <div>
                     <h3 style={{ margin: 0 }}>Recent finalized sales</h3>
-                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                      Receipt and payment context stays conservative and only appears when backed by a completed sale.
-                    </p>
                   </div>
                 </div>
                 <div className="timeline-list">
@@ -1887,9 +2111,6 @@ export const CustomerProfilePage = ({
                 <div className="card-header-row">
                   <div>
                     <h3 style={{ margin: 0 }}>Active workshop work</h3>
-                    <p className="muted-text" style={{ margin: "6px 0 0" }}>
-                      Keep the current operational picture separate from historic timeline entries.
-                    </p>
                   </div>
                 </div>
                 <div className="timeline-list">
@@ -1939,23 +2160,29 @@ export const CustomerProfilePage = ({
               </div>
             </div>
             <div className="actions-inline" style={{ marginTop: "10px" }}>
-              <Link to={`/customers/${id}/timeline`}>Open full timeline</Link>
-              <span className="muted-text">
-                Domain events persist sales completion and workshop lifecycle activity linked to this customer.
-              </span>
+              <button type="button" onClick={() => setProfileView("timeline")}>View full timeline</button>
             </div>
-          </>
-        ) : (
+      </section>
+      ) : null}
+
+      {profileView === "timeline" ? (
+      <section className="card customer-profile-workspace-card">
+        <div className="card-header-row">
+          <div>
+            <h2>Timeline</h2>
+          </div>
+          <Link to={`/customers/${id}/timeline`} className="button-link">Full history</Link>
+        </div>
           <EntityTimelinePanel
             entityType="CUSTOMER"
             entityId={id}
-            hint="Persistent domain events for this customer, including linked workshop and sales milestones."
             emptyState="No persistent domain events have been recorded for this customer yet."
           />
-        )}
       </section>
+      ) : null}
 
-      <section className="card">
+      {profileView === "sales" ? (
+      <section className="card customer-profile-workspace-card">
         <h2>Sales History</h2>
         <div className="table-wrap">
           <table>
@@ -2005,11 +2232,13 @@ export const CustomerProfilePage = ({
           </table>
         </div>
         <div className="actions-inline" style={{ marginTop: "10px" }}>
-          <Link to={`/customers/${id}/timeline`}>Open full timeline</Link>
+          <Link to={`/customers/${id}/timeline`}>Full history</Link>
         </div>
       </section>
+      ) : null}
 
-      <section className="card">
+      {profileView === "workshop" ? (
+      <section className="card customer-profile-workspace-card">
         <h2>Workshop History</h2>
         <div className="table-wrap">
           <table>
@@ -2073,6 +2302,7 @@ export const CustomerProfilePage = ({
           </table>
         </div>
       </section>
+      ) : null}
     </div>
   );
 };

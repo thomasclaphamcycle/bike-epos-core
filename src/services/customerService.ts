@@ -17,7 +17,23 @@ type CreateCustomerInput = {
   lastName?: string;
   email?: string;
   phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  postcode?: string;
   notes?: string;
+};
+
+type UpdateCustomerProfileInput = {
+  firstName?: string;
+  lastName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  postcode?: string | null;
+  notes?: string | null;
 };
 
 type UpdateCustomerCommunicationPreferencesInput = {
@@ -33,6 +49,15 @@ const normalizeOptionalText = (value: string | undefined): string | undefined =>
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const normalizeNullableText = (value: string | null | undefined): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 const parseOptionalIsoDate = (
@@ -207,6 +232,10 @@ const toCustomerResponse = (customer: {
   lastName: string;
   email: string | null;
   phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
   emailAllowed: boolean;
   smsAllowed: boolean;
   whatsappAllowed: boolean;
@@ -223,6 +252,10 @@ const toCustomerResponse = (customer: {
     lastName: customer.lastName,
     email: customer.email,
     phone: customer.phone,
+    addressLine1: customer.addressLine1,
+    addressLine2: customer.addressLine2,
+    city: customer.city,
+    postcode: customer.postcode,
     emailAllowed: customer.emailAllowed,
     smsAllowed: customer.smsAllowed,
     whatsappAllowed: customer.whatsappAllowed,
@@ -271,6 +304,10 @@ export const createCustomer = async (input: CreateCustomerInput) => {
 
   const email = normalizeOptionalText(input.email)?.toLowerCase();
   const phone = normalizeOptionalText(input.phone);
+  const addressLine1 = normalizeOptionalText(input.addressLine1);
+  const addressLine2 = normalizeOptionalText(input.addressLine2);
+  const city = normalizeOptionalText(input.city);
+  const postcode = normalizeOptionalText(input.postcode);
   const notes = normalizeOptionalText(input.notes);
 
   try {
@@ -280,6 +317,10 @@ export const createCustomer = async (input: CreateCustomerInput) => {
         lastName: lastName ?? "",
         email,
         phone,
+        addressLine1,
+        addressLine2,
+        city,
+        postcode,
         notes,
       },
     });
@@ -302,6 +343,87 @@ export const getCustomerById = async (customerId: string) => {
   };
 };
 
+export const updateCustomerProfile = async (
+  customerId: string,
+  input: UpdateCustomerProfileInput,
+) => {
+  await assertCustomerExists(customerId);
+
+  const data: {
+    firstName?: string;
+    lastName?: string;
+    email?: string | null;
+    phone?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    postcode?: string | null;
+    notes?: string | null;
+  } = {};
+
+  if (input.firstName !== undefined) {
+    const firstName = normalizeOptionalText(normalizeNamePart(input.firstName));
+    if (!firstName) {
+      throw new HttpError(400, "firstName is required", "INVALID_CUSTOMER");
+    }
+    data.firstName = firstName;
+  }
+
+  if (input.lastName !== undefined) {
+    data.lastName = normalizeNamePart(input.lastName ?? "") ?? "";
+  }
+
+  const email = normalizeNullableText(input.email);
+  if (email !== undefined) {
+    data.email = email?.toLowerCase() ?? null;
+  }
+
+  const phone = normalizeNullableText(input.phone);
+  if (phone !== undefined) {
+    data.phone = phone;
+  }
+
+  const addressLine1 = normalizeNullableText(input.addressLine1);
+  if (addressLine1 !== undefined) {
+    data.addressLine1 = addressLine1;
+  }
+
+  const addressLine2 = normalizeNullableText(input.addressLine2);
+  if (addressLine2 !== undefined) {
+    data.addressLine2 = addressLine2;
+  }
+
+  const city = normalizeNullableText(input.city);
+  if (city !== undefined) {
+    data.city = city;
+  }
+
+  const postcode = normalizeNullableText(input.postcode);
+  if (postcode !== undefined) {
+    data.postcode = postcode;
+  }
+
+  const notes = normalizeNullableText(input.notes);
+  if (notes !== undefined) {
+    data.notes = notes;
+  }
+
+  try {
+    await prisma.customer.update({
+      where: { id: customerId },
+      data,
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === "P2002") {
+      throw new HttpError(409, "Customer email already exists", "CUSTOMER_EMAIL_EXISTS");
+    }
+    throw error;
+  }
+
+  return getCustomerById(customerId);
+};
+
 export const updateCustomerCommunicationPreferences = async (
   customerId: string,
   input: UpdateCustomerCommunicationPreferencesInput,
@@ -317,7 +439,10 @@ export const updateCustomerCommunicationPreferences = async (
     },
   });
 
-  return toCustomerResponse(customer);
+  return {
+    ...toCustomerResponse(customer),
+    summary: await buildCustomerSummary(customerId, customer.createdAt),
+  };
 };
 
 export const searchCustomers = async (query?: string, take = 20) => {

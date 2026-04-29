@@ -7,6 +7,7 @@ import {
   listCustomerWorkshopJobs,
   searchCustomers,
   updateCustomerCommunicationPreferences,
+  updateCustomerProfile,
 } from "../services/customerService";
 import {
   createCustomerBike,
@@ -28,6 +29,16 @@ const assertOptionalBikeString = (
   value: unknown,
   field: string,
   code: string,
+) => {
+  if (value !== undefined && value !== null && typeof value !== "string") {
+    throw new HttpError(400, `${field} must be a string`, code);
+  }
+};
+
+const assertOptionalCustomerString = (
+  value: unknown,
+  field: string,
+  code = "INVALID_CUSTOMER",
 ) => {
   if (value !== undefined && value !== null && typeof value !== "string") {
     throw new HttpError(400, `${field} must be a string`, code);
@@ -77,6 +88,10 @@ export const createCustomerHandler = async (req: Request, res: Response) => {
     lastName?: unknown;
     email?: unknown;
     phone?: unknown;
+    addressLine1?: unknown;
+    addressLine2?: unknown;
+    city?: unknown;
+    postcode?: unknown;
     notes?: unknown;
   };
 
@@ -95,6 +110,10 @@ export const createCustomerHandler = async (req: Request, res: Response) => {
   if (body.phone !== undefined && typeof body.phone !== "string") {
     throw new HttpError(400, "phone must be a string", "INVALID_CUSTOMER");
   }
+  assertOptionalCustomerString(body.addressLine1, "addressLine1");
+  assertOptionalCustomerString(body.addressLine2, "addressLine2");
+  assertOptionalCustomerString(body.city, "city");
+  assertOptionalCustomerString(body.postcode, "postcode");
   if (body.notes !== undefined && typeof body.notes !== "string") {
     throw new HttpError(400, "notes must be a string", "INVALID_CUSTOMER");
   }
@@ -105,6 +124,10 @@ export const createCustomerHandler = async (req: Request, res: Response) => {
     lastName: body.lastName,
     email: body.email,
     phone: body.phone,
+    addressLine1: body.addressLine1,
+    addressLine2: body.addressLine2,
+    city: body.city,
+    postcode: body.postcode,
     notes: body.notes,
   });
   res.status(201).json(customer);
@@ -112,6 +135,43 @@ export const createCustomerHandler = async (req: Request, res: Response) => {
 
 export const getCustomerHandler = async (req: Request, res: Response) => {
   const customer = await getCustomerById(req.params.id);
+  res.json(customer);
+};
+
+export const updateCustomerHandler = async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as {
+    firstName?: unknown;
+    lastName?: unknown;
+    email?: unknown;
+    phone?: unknown;
+    addressLine1?: unknown;
+    addressLine2?: unknown;
+    city?: unknown;
+    postcode?: unknown;
+    notes?: unknown;
+  };
+
+  assertOptionalCustomerString(body.firstName, "firstName");
+  assertOptionalCustomerString(body.lastName, "lastName");
+  assertOptionalCustomerString(body.email, "email");
+  assertOptionalCustomerString(body.phone, "phone");
+  assertOptionalCustomerString(body.addressLine1, "addressLine1");
+  assertOptionalCustomerString(body.addressLine2, "addressLine2");
+  assertOptionalCustomerString(body.city, "city");
+  assertOptionalCustomerString(body.postcode, "postcode");
+  assertOptionalCustomerString(body.notes, "notes");
+
+  const customer = await updateCustomerProfile(req.params.id, {
+    firstName: body.firstName as string | undefined,
+    lastName: body.lastName as string | null | undefined,
+    email: body.email as string | null | undefined,
+    phone: body.phone as string | null | undefined,
+    addressLine1: body.addressLine1 as string | null | undefined,
+    addressLine2: body.addressLine2 as string | null | undefined,
+    city: body.city as string | null | undefined,
+    postcode: body.postcode as string | null | undefined,
+    notes: body.notes as string | null | undefined,
+  });
   res.json(customer);
 };
 
