@@ -41,6 +41,12 @@ jobs:
           git -C $env:COREPOS_REPO_PATH status --short --branch
           git -C $env:COREPOS_REPO_PATH log --oneline -1
 
+      - name: Install deploy workflow dependencies
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci --ignore-scripts
+
       - name: Create pre-deploy database backup
         shell: powershell
         run: |
