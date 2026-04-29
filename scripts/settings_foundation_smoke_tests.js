@@ -327,8 +327,8 @@ const run = async () => {
           scanQuantityMode: "PROMPT_QUANTITY",
           quickAddEnabled: false,
           quickAddProducts: [
-            { label: "Workshop Tube", query: "TUBE-700C" },
-            { label: "Premium Lube", query: "Chain Lube" },
+            { label: "Workshop Tube", query: "TUBE-700C", type: "INVENTORY", refId: "variant-tube-700c" },
+            { label: "Premium Service", query: "Gold service", type: "SERVICE_TEMPLATE", refId: "template-gold-service" },
           ],
           duplicateScanBehavior: "PROMPT",
           enabledTenderMethods: ["CARD", "CASH", "STORE_CREDIT", "BANK_TRANSFER"],
@@ -405,8 +405,8 @@ const run = async () => {
     assert.equal(patchRes.json.settings.pos.scanQuantityMode, "PROMPT_QUANTITY");
     assert.equal(patchRes.json.settings.pos.quickAddEnabled, false);
     assert.deepEqual(patchRes.json.settings.pos.quickAddProducts, [
-      { label: "Workshop Tube", query: "TUBE-700C" },
-      { label: "Premium Lube", query: "Chain Lube" },
+      { label: "Workshop Tube", query: "TUBE-700C", type: "INVENTORY", refId: "variant-tube-700c" },
+      { label: "Premium Service", query: "Gold service", type: "SERVICE_TEMPLATE", refId: "template-gold-service" },
     ]);
     assert.equal(patchRes.json.settings.pos.duplicateScanBehavior, "PROMPT");
     assert.deepEqual(patchRes.json.settings.pos.enabledTenderMethods, [
@@ -472,8 +472,8 @@ const run = async () => {
     assert.equal(persistedPublicConfigRes.json.config.operations.dashboardWeatherEnabled, false);
     assert.equal(persistedPublicConfigRes.json.config.pos.defaultSaleType, "QUOTE");
     assert.deepEqual(persistedPublicConfigRes.json.config.pos.quickAddProducts, [
-      { label: "Workshop Tube", query: "TUBE-700C" },
-      { label: "Premium Lube", query: "Chain Lube" },
+      { label: "Workshop Tube", query: "TUBE-700C", type: "INVENTORY", refId: "variant-tube-700c" },
+      { label: "Premium Service", query: "Gold service", type: "SERVICE_TEMPLATE", refId: "template-gold-service" },
     ]);
     assert.equal(persistedPublicConfigRes.json.config.pos.compactBasketView, true);
     assert.equal("commercialSuggestionsEnabled" in persistedPublicConfigRes.json.config.workshop, false);

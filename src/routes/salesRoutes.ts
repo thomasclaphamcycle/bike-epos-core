@@ -10,6 +10,7 @@ import {
   listSaleHistoryHandler,
   listSaleTendersHandler,
   listSalesHandler,
+  reopenBasketFromSaleHandler,
 } from "../controllers/salesController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
@@ -26,6 +27,7 @@ salesRouter.get("/", requireRoleAtLeast("STAFF"), listSalesHandler);
 salesRouter.post("/:saleId/exchange", requireRoleAtLeast("MANAGER"), createExchangeSaleHandler);
 salesRouter.post("/:saleId/returns", requireRoleAtLeast("MANAGER"), createSaleReturnHandler);
 salesRouter.patch("/:saleId/customer", requireRoleAtLeast("STAFF"), attachCustomerToSaleHandler);
+salesRouter.post("/:saleId/reopen-basket", requireRoleAtLeast("STAFF"), reopenBasketFromSaleHandler);
 salesRouter.use("/:saleId/customer-capture-sessions", saleCustomerCaptureRouter);
 salesRouter.get("/:saleId/tenders", requireRoleAtLeast("STAFF"), listSaleTendersHandler);
 salesRouter.post("/:saleId/tenders", requireRoleAtLeast("STAFF"), addSaleTenderHandler);

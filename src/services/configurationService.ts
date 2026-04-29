@@ -20,6 +20,8 @@ type SettingDefinition<T> = {
 export type PosQuickAddProductSetting = {
   label: string;
   query: string;
+  type?: "INVENTORY" | "SERVICE_TEMPLATE";
+  refId?: string;
 };
 
 export type ShopSettings = {
@@ -457,6 +459,16 @@ const normalizeQuickAddProductsSetting = (value: unknown, field: string): PosQui
     }
 
     const record = entry as Record<string, unknown>;
+    const type = record.type === undefined
+      ? undefined
+      : normalizeEnumSetting(record.type, `${field}[${index}].type`, ["INVENTORY", "SERVICE_TEMPLATE"] as const);
+    const refId = record.refId === undefined
+      ? undefined
+      : normalizeTextSetting(record.refId, `${field}[${index}].refId`, {
+          allowEmpty: false,
+          maxLength: 80,
+        });
+
     return {
       label: normalizeTextSetting(record.label, `${field}[${index}].label`, {
         allowEmpty: false,
@@ -466,6 +478,8 @@ const normalizeQuickAddProductsSetting = (value: unknown, field: string): PosQui
         allowEmpty: false,
         maxLength: 120,
       }),
+      ...(type ? { type } : {}),
+      ...(refId ? { refId } : {}),
     };
   });
 };

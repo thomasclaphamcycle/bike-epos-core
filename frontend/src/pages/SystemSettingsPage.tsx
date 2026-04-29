@@ -2159,7 +2159,7 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
 
       {isStoreInfoMode ? (
         <>
-      <SurfaceCard>
+      <SurfaceCard className="store-info-card">
         <SectionHeader
           title="Business Details"
           description="Define how the shop should identify itself across customer-facing and operational surfaces."

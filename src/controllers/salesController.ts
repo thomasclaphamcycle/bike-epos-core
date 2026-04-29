@@ -10,6 +10,7 @@ import {
   getSaleById,
   listSaleTenders,
   listSales,
+  reopenBasketFromUnpaidSale,
 } from "../services/salesService";
 import {
   SALES_HISTORY_STATUS_VALUES,
@@ -251,6 +252,11 @@ export const attachCustomerToSaleHandler = async (req: Request, res: Response) =
   }
 
   const result = await attachCustomerToSale(req.params.saleId, body.customerId ?? null);
+  res.json(result);
+};
+
+export const reopenBasketFromSaleHandler = async (req: Request, res: Response) => {
+  const result = await reopenBasketFromUnpaidSale(req.params.saleId);
   res.json(result);
 };
 

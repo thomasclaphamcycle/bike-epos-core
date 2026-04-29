@@ -46,6 +46,7 @@ const ACTIVE_BASKET_KEY = "corepos_active_basket_id";
 
 type ProductSearchRow = {
   id: string;
+  productId?: string;
   name: string;
   sku: string;
   barcode: string | null;
@@ -53,13 +54,46 @@ type ProductSearchRow = {
   onHandQty: number;
 };
 
+type VariantDetail = {
+  id: string;
+  productId: string;
+  sku: string;
+  barcode: string | null;
+  name: string | null;
+  option: string | null;
+  retailPricePence: number;
+  product?: {
+    name: string;
+  };
+};
+
+type ServiceTemplateQuickAdd = {
+  id: string;
+  name: string;
+  targetTotalPricePence: number | null;
+  lineCount: number;
+  lines: Array<{
+    lineTotalPence: number;
+    isOptional: boolean;
+  }>;
+};
+
 type QuickAddTile = {
   key: string;
   testId: string;
   label: string;
   query: string;
-  product: ProductSearchRow;
-};
+} & (
+  | {
+      type: "INVENTORY";
+      product: ProductSearchRow;
+    }
+  | {
+      type: "SERVICE_TEMPLATE";
+      template: ServiceTemplateQuickAdd;
+      pricePence: number;
+    }
+);
 
 type BasketResponse = {
   id: string;
@@ -273,6 +307,16 @@ const toQuickAddKey = (label: string, index: number) => {
   return slug || `quick-add-${index + 1}`;
 };
 
+const toProductSearchRowFromVariant = (variant: VariantDetail): ProductSearchRow => ({
+  id: variant.id,
+  productId: variant.productId,
+  name: variant.name ?? variant.option ?? variant.product?.name ?? variant.sku,
+  sku: variant.sku,
+  barcode: variant.barcode,
+  pricePence: variant.retailPricePence,
+  onHandQty: 0,
+});
+
 export const PosPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -327,6 +371,7 @@ export const PosPage = () => {
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [confirmingCardPayment, setConfirmingCardPayment] = useState(false);
+  const [returningToBasket, setReturningToBasket] = useState(false);
 
   const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
   const enabledTenderMethods = useMemo(() => {
@@ -878,21 +923,56 @@ export const PosPage = () => {
       try {
         const tiles = await Promise.all(
           appConfig.pos.quickAddProducts.map(async (definition, index) => {
-            const payload = await apiGet<{ rows: ProductSearchRow[] }>(
-              `/api/products/search?q=${encodeURIComponent(definition.query)}&take=6`,
-            );
-            const rows = payload.rows || [];
-            const normalizedQuery = definition.query.toLowerCase();
-            const product = rows.find((row) =>
-              row.name.toLowerCase().includes(normalizedQuery)
-                || row.sku.toLowerCase() === normalizedQuery
-                || row.barcode?.toLowerCase() === normalizedQuery,
-            ) ?? rows[0] ?? null;
-
             const quickAddKey = toQuickAddKey(definition.label, index);
+            if (definition.type === "SERVICE_TEMPLATE" && definition.refId) {
+              const payload = await apiGet<{ template: ServiceTemplateQuickAdd }>(
+                `/api/workshop/service-templates/${encodeURIComponent(definition.refId)}`,
+              );
+              const template = payload.template;
+              const requiredLineTotal = template.lines
+                .filter((line) => !line.isOptional)
+                .reduce((sum, line) => sum + line.lineTotalPence, 0);
+
+              return {
+                key: `${quickAddKey}-${index + 1}`,
+                testId: quickAddKey,
+                label: definition.label,
+                query: definition.query,
+                type: "SERVICE_TEMPLATE" as const,
+                template,
+                pricePence: template.targetTotalPricePence ?? requiredLineTotal,
+              };
+            }
+
+            let product: ProductSearchRow | null = null;
+            if (definition.refId) {
+              product = toProductSearchRowFromVariant(
+                await apiGet<VariantDetail>(`/api/variants/${encodeURIComponent(definition.refId)}`),
+              );
+            } else {
+              const searchParams = new URLSearchParams();
+              searchParams.set("q", definition.query);
+              searchParams.set("take", "6");
+              const payload = await apiGet<{ rows: ProductSearchRow[] }>(
+                `/api/products/search?${searchParams.toString()}`,
+              );
+              const rows = payload.rows || [];
+              const normalizedQuery = definition.query.toLowerCase();
+              product = rows.find((row) =>
+                row.name.toLowerCase().includes(normalizedQuery)
+                  || row.sku.toLowerCase() === normalizedQuery
+                  || row.barcode?.toLowerCase() === normalizedQuery,
+              ) ?? rows[0] ?? null;
+            }
 
             return product
-              ? { ...definition, key: `${quickAddKey}-${index + 1}`, testId: quickAddKey, product }
+              ? {
+                  ...definition,
+                  key: `${quickAddKey}-${index + 1}`,
+                  testId: quickAddKey,
+                  type: "INVENTORY" as const,
+                  product,
+                }
               : null;
           }),
         );
@@ -1289,6 +1369,27 @@ export const PosPage = () => {
     }
   };
 
+  const addServiceTemplate = async (templateId: string) => {
+    if (!basketId) {
+      error("No active basket.");
+      return;
+    }
+
+    try {
+      const previousBasket = basket;
+      const payload = await apiPost<BasketResponse>(
+        `/api/baskets/${encodeURIComponent(basketId)}/service-templates`,
+        { templateId },
+      );
+      setBasket(payload);
+      flashBasketRow(findHighlightedBasketItemId(previousBasket, payload));
+      restoreScannerSearchFocus();
+    } catch (addError) {
+      const message = addError instanceof Error ? addError.message : "Failed to add service template";
+      error(message);
+    }
+  };
+
   const submitProductSearch = async (quantity: number) => {
     if (!basketId) {
       error("No active basket.");
@@ -1510,6 +1611,41 @@ export const PosPage = () => {
     }
   };
 
+  const returnSaleToBasket = async () => {
+    if (!sale) {
+      error("No live sale to return.");
+      return;
+    }
+
+    setReturningToBasket(true);
+    try {
+      const requestId = beginPosLifecycleRequest();
+      const payload = await apiPost<BasketResponse>(
+        `/api/sales/${encodeURIComponent(sale.sale.id)}/reopen-basket`,
+        {},
+      );
+      if (!canApplyPosLifecycle(requestId)) {
+        return;
+      }
+      setSale(null);
+      setReceiptUrl(null);
+      setBasket(payload);
+      setSelectedCustomer(payload.customer ?? null);
+      setContextCustomerId(payload.customer?.id ?? null);
+      setSelectedTenderMethod(defaultTenderMethod);
+      setCashTenderedAmount("");
+      localStorage.removeItem(ACTIVE_SALE_KEY);
+      persistActiveBasketId(payload.id);
+      syncQuery({ basketId: payload.id, saleId: null });
+      success("Returned to basket.");
+    } catch (returnError) {
+      const message = returnError instanceof Error ? returnError.message : "Could not return to basket";
+      error(message);
+    } finally {
+      setReturningToBasket(false);
+    }
+  };
+
   const completeSale = async () => {
     if (!sale) {
       error("No sale to complete.");
@@ -1658,6 +1794,7 @@ export const PosPage = () => {
   const basketLineCount = basket?.items.length ?? 0;
   const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
   const depositPaidPence = saleContext.type === "WORKSHOP" ? saleContext.depositPaidPence ?? 0 : 0;
+  const discountAppliedPence = 0;
   const contextRemainingPence = Math.max(activeTotal - depositPaidPence, 0);
   const payablePence = sale ? remainingDuePence : contextRemainingPence;
   const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
@@ -1704,14 +1841,15 @@ export const PosPage = () => {
     || selectedCustomer?.name
     || (saleContext.type === "WORKSHOP" ? saleContext.customerName : null)
     || "Walk-in";
-  const activeSourceLabel = contextHeaderTitle;
-  const activeSourceDetail = apiSourceDetail
-    ?? (saleContext.type === "WORKSHOP" ? `Job #${saleContext.jobId}` : null);
   const activeCustomerStatusLabel = selectedCustomer
     ? "Linked profile"
     : saleContext.type === "WORKSHOP" && saleContext.customerName
       ? "Workshop contact"
       : "No profile attached";
+  const discountSummaryLabel = discountAppliedPence > 0 ? formatMoney(discountAppliedPence) : "None";
+  const discountSummaryNote = discountAppliedPence > 0 ? "Applied to basket" : "Full price";
+  const depositSummaryLabel = depositPaidPence > 0 ? formatMoney(depositPaidPence) : "None";
+  const depositSummaryNote = depositPaidPence > 0 ? "Already paid" : "No deposit applied";
   const storeCreditCustomer = sale?.sale.customer ?? selectedCustomer;
   const storeCreditValidationMessage =
     selectedTenderMethod === "STORE_CREDIT"
@@ -1726,6 +1864,11 @@ export const PosPage = () => {
       : null;
   const tenderValidationMessage = cashValidationMessage ?? storeCreditValidationMessage ?? cardValidationMessage;
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
+  const canReturnSaleToBasket = Boolean(
+    sale
+    && sale.tenderSummary.tenderedPence === 0
+    && !sale.payment,
+  );
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
 
@@ -2000,12 +2143,20 @@ export const PosPage = () => {
                           type="button"
                           className="pos-quick-add-tile"
                           data-testid={`pos-quick-add-${tile.testId}`}
-                          onClick={() => void addItem(tile.product.id)}
+                          onClick={() => {
+                            if (tile.type === "SERVICE_TEMPLATE") {
+                              void addServiceTemplate(tile.template.id);
+                              return;
+                            }
+                            void addItem(tile.product.id);
+                          }}
                           disabled={!canQuickAdd}
                           aria-label={`Quick add ${tile.label}`}
                         >
                           <span className="pos-quick-add-name">{tile.label}</span>
-                          <span className="pos-quick-add-price">{formatMoney(tile.product.pricePence)}</span>
+                          <span className="pos-quick-add-price">
+                            {formatMoney(tile.type === "SERVICE_TEMPLATE" ? tile.pricePence : tile.product.pricePence)}
+                          </span>
                         </button>
                       );
                     })}
@@ -2387,7 +2538,20 @@ export const PosPage = () => {
                   <div className="pos-section-kicker">Totals & Payment</div>
                   {sale ? <h2>Take Payment</h2> : null}
                 </div>
-                <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
+                <div className="actions-inline pos-payment-heading-actions">
+                  {sale ? (
+                    <button
+                      type="button"
+                      className="secondary pos-return-basket-button"
+                      onClick={() => void returnSaleToBasket()}
+                      disabled={!canReturnSaleToBasket || completing || confirmingCardPayment || returningToBasket}
+                      title={canReturnSaleToBasket ? "Return this unpaid sale to basket editing" : "Cannot return after payment activity"}
+                    >
+                      {returningToBasket ? "Returning..." : "Back to basket"}
+                    </button>
+                  ) : null}
+                  <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
+                </div>
               </div>
 
               {saleContext.type === "WORKSHOP" ? (
@@ -2405,24 +2569,15 @@ export const PosPage = () => {
                     <strong>{formatMoney(payablePence)}</strong>
                   </div>
                   <div>
-                    <span className="muted-text">Source</span>
-                    <strong>{activeSourceLabel}</strong>
-                    {activeSourceDetail ? (
-                      <span className="pos-payment-summary-note">{activeSourceDetail}</span>
-                    ) : null}
+                    <span className="muted-text">Discount</span>
+                    <strong>{discountSummaryLabel}</strong>
+                    <span className="pos-payment-summary-note">{discountSummaryNote}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="pos-payment-summary-customer"
-                    onClick={editPaymentCustomer}
-                    aria-expanded={customerOptionsOpen}
-                    aria-controls="pos-customer-options-panel"
-                    aria-label={`Edit customer. Current customer: ${activeCustomerName}`}
-                  >
-                    <span className="muted-text">Customer</span>
-                    <strong>{activeCustomerName}</strong>
-                    <span className="pos-payment-summary-note">{activeCustomerStatusLabel}</span>
-                  </button>
+                  <div>
+                    <span className="muted-text">Deposit</span>
+                    <strong>{depositSummaryLabel}</strong>
+                    <span className="pos-payment-summary-note">{depositSummaryNote}</span>
+                  </div>
                 </div>
               ) : (
                 <div className="pos-payment-summary pos-payment-summary-retail">
@@ -2435,24 +2590,15 @@ export const PosPage = () => {
                     <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
                   </div>
                   <div>
-                    <span className="muted-text">Source</span>
-                    <strong>{activeSourceLabel}</strong>
-                    {activeSourceDetail ? (
-                      <span className="pos-payment-summary-note">{activeSourceDetail}</span>
-                    ) : null}
+                    <span className="muted-text">Discount</span>
+                    <strong>{discountSummaryLabel}</strong>
+                    <span className="pos-payment-summary-note">{discountSummaryNote}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="pos-payment-summary-customer"
-                    onClick={editPaymentCustomer}
-                    aria-expanded={customerOptionsOpen}
-                    aria-controls="pos-customer-options-panel"
-                    aria-label={`Edit customer. Current customer: ${activeCustomerName}`}
-                  >
-                    <span className="muted-text">Customer</span>
-                    <strong>{activeCustomerName}</strong>
-                    <span className="pos-payment-summary-note">{activeCustomerStatusLabel}</span>
-                  </button>
+                  <div>
+                    <span className="muted-text">Deposit</span>
+                    <strong>{depositSummaryLabel}</strong>
+                    <span className="pos-payment-summary-note">{depositSummaryNote}</span>
+                  </div>
                 </div>
               )}
 

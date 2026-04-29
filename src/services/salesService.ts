@@ -16,6 +16,7 @@ import {
   recordCashSaleMovementForPaymentTx,
 } from "./tillService";
 import { buildPosSaleSourceSummary } from "./posSaleSource";
+import { getBasketById } from "./basketService";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -1810,6 +1811,96 @@ export const attachCustomerToSale = async (
   });
 
   return toSaleResponse(saleId);
+};
+
+export const reopenBasketFromUnpaidSale = async (saleId: string) => {
+  if (!isUuid(saleId)) {
+    throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
+  }
+
+  const basketId = await prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.findUnique({
+      where: { id: saleId },
+      select: {
+        id: true,
+        basketId: true,
+        completedAt: true,
+        workshopJobId: true,
+        items: {
+          select: {
+            id: true,
+          },
+        },
+        _count: {
+          select: {
+            payments: true,
+            paymentIntents: true,
+            tenders: true,
+            returns: true,
+            refunds: true,
+          },
+        },
+      },
+    });
+
+    if (!sale) {
+      throw new HttpError(404, "Sale not found", "SALE_NOT_FOUND");
+    }
+    if (!sale.basketId) {
+      throw new HttpError(409, "Sale is not linked to a basket", "SALE_HAS_NO_BASKET");
+    }
+    if (sale.completedAt) {
+      throw new HttpError(409, "Completed sales cannot be returned to basket", "SALE_ALREADY_COMPLETED");
+    }
+    if (sale.workshopJobId) {
+      throw new HttpError(
+        409,
+        "Workshop checkouts cannot be returned to basket from POS",
+        "WORKSHOP_SALE_REOPEN_NOT_SUPPORTED",
+      );
+    }
+    if (
+      sale._count.payments > 0
+      || sale._count.paymentIntents > 0
+      || sale._count.tenders > 0
+      || sale._count.returns > 0
+      || sale._count.refunds > 0
+    ) {
+      throw new HttpError(
+        409,
+        "Sale has payment activity and cannot be returned to basket",
+        "SALE_HAS_PAYMENT_ACTIVITY",
+      );
+    }
+
+    const saleItemIds = sale.items.map((item) => item.id);
+    if (saleItemIds.length > 0) {
+      await tx.stockLedgerEntry.deleteMany({
+        where: {
+          referenceType: "SALE_ITEM",
+          referenceId: { in: saleItemIds },
+        },
+      });
+      await tx.inventoryMovement.deleteMany({
+        where: {
+          referenceType: "SALE_ITEM",
+          referenceId: { in: saleItemIds },
+        },
+      });
+    }
+
+    await tx.sale.delete({
+      where: { id: sale.id },
+    });
+    await tx.basket.update({
+      where: { id: sale.basketId },
+      data: { status: BasketStatus.OPEN },
+    });
+
+    return sale.basketId;
+  });
+
+  return getBasketById(basketId);
 };
 
 export const listSales = async ({

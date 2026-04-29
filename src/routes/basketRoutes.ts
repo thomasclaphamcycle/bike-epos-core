@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   addBasketItemHandler,
+  addBasketServiceTemplateHandler,
   attachCustomerToBasketHandler,
   checkoutBasketHandler,
   createBasketHandler,
@@ -18,11 +19,13 @@ basketRouter.get("/:id", requireRoleAtLeast("STAFF"), getBasketHandler);
 basketRouter.patch("/:id/customer", requireRoleAtLeast("STAFF"), attachCustomerToBasketHandler);
 basketRouter.use("/:basketId/customer-capture-sessions", basketCustomerCaptureRouter);
 basketRouter.post("/:id/items", requireRoleAtLeast("STAFF"), addBasketItemHandler);
+basketRouter.post("/:id/service-templates", requireRoleAtLeast("STAFF"), addBasketServiceTemplateHandler);
 basketRouter.patch("/:id/items/:itemId", requireRoleAtLeast("STAFF"), updateBasketItemHandler);
 basketRouter.delete("/:id/items/:itemId", requireRoleAtLeast("STAFF"), deleteBasketItemHandler);
 
 // M28 contract aliases while preserving existing /items endpoints.
 basketRouter.post("/:id/lines", requireRoleAtLeast("STAFF"), addBasketItemHandler);
+basketRouter.post("/:id/template-lines", requireRoleAtLeast("STAFF"), addBasketServiceTemplateHandler);
 basketRouter.patch("/:id/lines/:itemId", requireRoleAtLeast("STAFF"), updateBasketItemHandler);
 basketRouter.delete("/:id/lines/:itemId", requireRoleAtLeast("STAFF"), deleteBasketItemHandler);
 

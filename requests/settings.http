@@ -39,9 +39,9 @@ X-Staff-Id: demo-admin
     "scanQuantityMode": "INCREMENT_ONE",
     "quickAddEnabled": true,
     "quickAddProducts": [
-      { "label": "Inner Tube", "query": "Inner Tube" },
-      { "label": "Chain Lube", "query": "Chain Lube" },
-      { "label": "Brake Pads", "query": "Brake Pads" }
+      { "label": "Inner Tube", "query": "Inner Tube", "type": "INVENTORY" },
+      { "label": "Chain Lube", "query": "Chain Lube", "type": "INVENTORY" },
+      { "label": "Bronze Service", "query": "Bronze Service", "type": "SERVICE_TEMPLATE", "refId": "replace-with-template-id" }
     ],
     "duplicateScanBehavior": "INCREMENT_QUANTITY",
     "enabledTenderMethods": ["CARD", "CASH", "STORE_CREDIT"],

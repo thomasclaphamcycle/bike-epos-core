@@ -269,7 +269,16 @@ export const PosCustomerCapturePanel = ({
         <div className="card-header-row pos-customer-capture-header">
           <div className="pos-customer-capture-header-copy">
             {isExpanded ? <div className="table-primary">Tap Customer</div> : null}
-            <p className="pos-customer-capture-eyebrow">NFC capture flow</p>
+            <p className="pos-customer-capture-eyebrow">
+              <span className="pos-customer-capture-nfc-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M7 7c2.9 2.9 2.9 7.1 0 10" />
+                  <path d="M11 5c4 4 4 10 0 14" />
+                  <path d="M15 3c5.2 5.2 5.2 12.8 0 18" />
+                </svg>
+              </span>
+              <span>NFC capture flow</span>
+            </p>
           </div>
           {!isExpanded ? (
             <button

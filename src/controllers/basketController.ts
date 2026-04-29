@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PosSaleSource } from "@prisma/client";
 import {
   addBasketItem,
+  addBasketServiceTemplate,
   attachCustomerToBasket,
   createBasket,
   getBasketById,
@@ -95,6 +96,18 @@ export const addBasketItemHandler = async (req: Request, res: Response) => {
     barcode,
     variantId,
     quantity: parsedQuantity,
+  });
+
+  res.status(201).json(basket);
+};
+
+export const addBasketServiceTemplateHandler = async (req: Request, res: Response) => {
+  const { templateId } = req.body as {
+    templateId?: string;
+  };
+
+  const basket = await addBasketServiceTemplate(req.params.id, {
+    templateId,
   });
 
   res.status(201).json(basket);

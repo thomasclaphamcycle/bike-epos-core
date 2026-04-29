@@ -1,8 +1,11 @@
-import { Basket, BasketItem, BasketStatus, PosSaleSource } from "@prisma/client";
+import { Basket, BasketItem, BasketStatus, PosSaleSource, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { findBarcodeOrThrow } from "./productLookupService";
 import { HttpError, isUuid } from "../utils/http";
-import { toPosLineItemType } from "./posLineItemType";
+import {
+  toPosLineItemType,
+  WORKSHOP_SERVICE_TEMPLATE_LABOUR_SKU_PREFIX,
+} from "./posLineItemType";
 import { buildPosSaleSourceSummary } from "./posSaleSource";
 
 type BasketWithItems = Basket & {
@@ -32,6 +35,10 @@ type AddBasketItemInput = {
   barcode?: string;
   variantId?: string;
   quantity: number;
+};
+
+type AddBasketServiceTemplateInput = {
+  templateId?: string;
 };
 
 type CreateBasketInput = {
@@ -82,6 +89,89 @@ const assertOpenBasket = (basket: Basket): void => {
   if (basket.status !== BasketStatus.OPEN) {
     throw new HttpError(409, "Basket is not open", "BASKET_NOT_OPEN");
   }
+};
+
+const getOrCreateTemplateLabourVariantTx = async (
+  tx: Prisma.TransactionClient,
+  template: { id: string; name: string },
+) => {
+  const sku = `${WORKSHOP_SERVICE_TEMPLATE_LABOUR_SKU_PREFIX}${template.id}`;
+  const existing = await tx.variant.findUnique({
+    where: { sku },
+    select: {
+      id: true,
+      productId: true,
+      retailPricePence: true,
+    },
+  });
+
+  if (existing) {
+    await tx.product.update({
+      where: { id: existing.productId },
+      data: {
+        name: template.name,
+        brand: "Internal",
+        description: "Service template labour line item for POS checkout",
+        isActive: true,
+      },
+    });
+    return existing;
+  }
+
+  const serviceProduct = await tx.product.create({
+    data: {
+      name: template.name,
+      brand: "Internal",
+      description: "Service template labour line item for POS checkout",
+    },
+    select: { id: true },
+  });
+
+  return tx.variant.create({
+    data: {
+      productId: serviceProduct.id,
+      sku,
+      name: null,
+      option: "Service",
+      retailPrice: new Prisma.Decimal(0),
+      retailPricePence: 0,
+    },
+    select: {
+      id: true,
+      productId: true,
+      retailPricePence: true,
+    },
+  });
+};
+
+const upsertBasketLineTx = async (
+  tx: Prisma.TransactionClient,
+  input: {
+    basketId: string;
+    variantId: string;
+    quantity: number;
+    unitPrice: number;
+  },
+) => {
+  await tx.basketItem.upsert({
+    where: {
+      basketId_variantId: {
+        basketId: input.basketId,
+        variantId: input.variantId,
+      },
+    },
+    create: {
+      basketId: input.basketId,
+      variantId: input.variantId,
+      quantity: input.quantity,
+      unitPrice: input.unitPrice,
+    },
+    update: {
+      quantity: {
+        increment: input.quantity,
+      },
+    },
+  });
 };
 
 const toBasketResponse = (basket: BasketWithItems) => {
@@ -322,29 +412,101 @@ export const addBasketItem = async (basketId: string, input: AddBasketItemInput)
 
   const unitPrice = variant.retailPricePence;
 
-  await prisma.basketItem.upsert({
-    where: {
-      basketId_variantId: {
-        basketId,
-        variantId,
-      },
-    },
-    create: {
+  await prisma.$transaction(async (tx) => {
+    await upsertBasketLineTx(tx, {
       basketId,
       variantId,
       quantity: input.quantity,
       unitPrice,
-    },
-    update: {
-      quantity: {
-        increment: input.quantity,
-      },
-    },
+    });
   });
 
   const updatedBasket = await getBasketWithItems(basketId);
   if (!updatedBasket) {
     throw new HttpError(500, "Could not load basket after add", "BASKET_LOAD_FAILED");
+  }
+
+  return toBasketResponse(updatedBasket);
+};
+
+export const addBasketServiceTemplate = async (
+  basketId: string,
+  input: AddBasketServiceTemplateInput,
+) => {
+  validateBasketId(basketId);
+  const templateId = input.templateId;
+  if (!templateId || !isUuid(templateId)) {
+    throw new HttpError(400, "templateId must be a valid UUID", "INVALID_WORKSHOP_SERVICE_TEMPLATE_ID");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const basket = await tx.basket.findUnique({ where: { id: basketId } });
+    if (!basket) {
+      throw new HttpError(404, "Basket not found", "BASKET_NOT_FOUND");
+    }
+    assertOpenBasket(basket);
+
+    const template = await tx.workshopServiceTemplate.findUnique({
+      where: { id: templateId },
+      include: {
+        lines: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          include: {
+            variant: {
+              select: {
+                id: true,
+                retailPricePence: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!template || !template.isActive) {
+      throw new HttpError(
+        404,
+        "Workshop service template not found",
+        "WORKSHOP_SERVICE_TEMPLATE_NOT_FOUND",
+      );
+    }
+
+    const linesToApply = template.lines.filter((line) => !line.isOptional);
+    if (linesToApply.length === 0) {
+      throw new HttpError(
+        400,
+        "Quick-add service templates need at least one required line",
+        "WORKSHOP_SERVICE_TEMPLATE_EMPTY",
+      );
+    }
+
+    let labourVariant: Awaited<ReturnType<typeof getOrCreateTemplateLabourVariantTx>> | null = null;
+
+    for (const line of linesToApply) {
+      if (line.type === "LABOUR" && !labourVariant) {
+        labourVariant = await getOrCreateTemplateLabourVariantTx(tx, template);
+      }
+      const variantId = line.type === "LABOUR" ? labourVariant?.id : line.variantId;
+      if (!variantId) {
+        throw new HttpError(
+          409,
+          "Service template part lines must be linked to inventory before they can be used on POS",
+          "WORKSHOP_SERVICE_TEMPLATE_PART_NOT_LINKED",
+        );
+      }
+
+      await upsertBasketLineTx(tx, {
+        basketId,
+        variantId,
+        quantity: line.qty,
+        unitPrice: line.unitPricePence ?? line.variant?.retailPricePence ?? 0,
+      });
+    }
+  });
+
+  const updatedBasket = await getBasketWithItems(basketId);
+  if (!updatedBasket) {
+    throw new HttpError(500, "Could not load basket after template add", "BASKET_LOAD_FAILED");
   }
 
   return toBasketResponse(updatedBasket);
