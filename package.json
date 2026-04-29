@@ -68,6 +68,7 @@
     "test:m29": "node scripts/run_smoke_test.js scripts/products_m29_smoke_tests.js",
     "test:m30": "node scripts/run_smoke_test.js scripts/workshop_m30_smoke_tests.js",
     "test:m31": "node scripts/run_smoke_test.js scripts/payments_m31_smoke_tests.js",
+    "test:dojo-card-terminals": "node scripts/run_smoke_test.js scripts/dojo_card_terminal_smoke_tests.js",
     "test:m32": "node scripts/run_smoke_test.js scripts/sales_m32_smoke_tests.js",
     "test:m33": "node scripts/run_smoke_test.js scripts/inventory_adjust_m33_smoke_tests.js",
     "test:m34": "node scripts/run_smoke_test.js scripts/customers_m34_smoke_tests.js",

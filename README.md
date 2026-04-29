@@ -372,6 +372,8 @@ Intentional trial limitations to note:
 
 Sales now support explicit tender lines (cash/card/bank transfer/voucher) with split payment and cash change-due handling.
 
+Dojo Pay at Counter card terminal setup is documented in [`docs/dojo_payments.md`](docs/dojo_payments.md). The integration is optional, keeps manual card approval as a fallback, supports browser-local till point setup, and can be exercised locally with `DOJO_MOCK_MODE=1`.
+
 - Endpoints:
   - `POST /api/sales/:saleId/tenders`
   - `GET /api/sales/:saleId/tenders`

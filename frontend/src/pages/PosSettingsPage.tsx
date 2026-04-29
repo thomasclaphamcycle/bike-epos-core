@@ -5,6 +5,20 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
 import { invalidateAppConfigCache } from "../config/appConfig";
+import {
+  CARD_TERMINAL_ROUTES,
+  POS_TILL_POINTS,
+  clearStoredPosWorkstationAssignment,
+  getCardTerminalRoute,
+  getDefaultTerminalRouteIdForTill,
+  getPosTillPoint,
+  getStoredPosWorkstationAssignment,
+  isCardTerminalRouteId,
+  isPosTillPointId,
+  saveStoredPosWorkstationAssignment,
+  type CardTerminalRouteId,
+  type PosTillPointId,
+} from "../features/pos/tillWorkstation";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import {
   type WorkshopServiceTemplate,
@@ -83,6 +97,34 @@ type PosSettingsResponse = {
   };
 };
 
+type CardTerminalPublicConfig = {
+  provider: "DOJO";
+  enabled: boolean;
+  configured: boolean;
+  mockMode: boolean;
+  defaultTerminalId: string | null;
+  terminalRoutes: Array<{
+    routeId: CardTerminalRouteId;
+    label: string;
+    terminalId: string | null;
+  }>;
+  workstationHint: {
+    remoteAddress: string | null;
+    suggestedTillPointId: PosTillPointId | null;
+  };
+  currencyCode: string;
+};
+
+type CardTerminalConfigResponse = {
+  config: CardTerminalPublicConfig;
+};
+
+type WorkstationSetupForm = {
+  tillPointId: PosTillPointId | "";
+  terminalRouteId: CardTerminalRouteId;
+  terminalRouteOverride: boolean;
+};
+
 type NumericPosSettingKey =
   | "defaultTaxRatePercent"
   | "holdBasketTtlHours"
@@ -154,6 +196,18 @@ const formatTenderSummary = (methods: PosSettings["enabledTenderMethods"]) =>
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
+const getInitialWorkstationSetupForm = (): WorkstationSetupForm => {
+  const assignment = getStoredPosWorkstationAssignment();
+  const terminalRouteId = assignment.terminalRouteId
+    ?? (assignment.tillPointId ? getDefaultTerminalRouteIdForTill(assignment.tillPointId) : "TERMINAL_A");
+
+  return {
+    tillPointId: assignment.tillPointId ?? "",
+    terminalRouteId,
+    terminalRouteOverride: assignment.terminalRouteOverride,
+  };
+};
+
 const getTemplateRequiredLineTotal = (template: WorkshopServiceTemplate) =>
   template.lines
     .filter((line) => !line.isOptional)
@@ -197,8 +251,16 @@ export const PosSettingsPage = () => {
   const [serviceTemplates, setServiceTemplates] = useState<WorkshopServiceTemplate[]>([]);
   const [quickAddSearchLoading, setQuickAddSearchLoading] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [workstationSetup, setWorkstationSetup] = useState<WorkstationSetupForm>(() =>
+    getInitialWorkstationSetupForm(),
+  );
+  const [savedWorkstationSetup, setSavedWorkstationSetup] = useState<WorkstationSetupForm>(() =>
+    getInitialWorkstationSetupForm(),
+  );
+  const [cardTerminalConfig, setCardTerminalConfig] = useState<CardTerminalPublicConfig | null>(null);
 
   const isDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
+  const isWorkstationSetupDirty = JSON.stringify(workstationSetup) !== JSON.stringify(savedWorkstationSetup);
 
   const updateSetting = <K extends keyof PosSettings>(key: K, value: PosSettings[K]) => {
     setSettings((current) => ({
@@ -274,6 +336,70 @@ export const PosSettingsPage = () => {
     }));
   };
 
+  const chooseWorkstationTillPoint = (tillPointId: PosTillPointId | "") => {
+    setWorkstationSetup((current) => {
+      if (!tillPointId) {
+        return {
+          ...current,
+          tillPointId: "",
+          terminalRouteOverride: false,
+        };
+      }
+
+      return {
+        tillPointId,
+        terminalRouteId: getDefaultTerminalRouteIdForTill(tillPointId),
+        terminalRouteOverride: false,
+      };
+    });
+  };
+
+  const chooseWorkstationTerminalRoute = (terminalRouteId: CardTerminalRouteId) => {
+    setWorkstationSetup((current) => ({
+      ...current,
+      terminalRouteId,
+      terminalRouteOverride: current.tillPointId
+        ? terminalRouteId !== getDefaultTerminalRouteIdForTill(current.tillPointId)
+        : false,
+    }));
+  };
+
+  const saveWorkstationSetup = () => {
+    try {
+      if (!workstationSetup.tillPointId) {
+        clearStoredPosWorkstationAssignment();
+        setSavedWorkstationSetup(workstationSetup);
+        success("Till point setup cleared for this browser");
+        return;
+      }
+
+      saveStoredPosWorkstationAssignment({
+        tillPointId: workstationSetup.tillPointId,
+        terminalRouteId: workstationSetup.terminalRouteId,
+        terminalRouteOverride: workstationSetup.terminalRouteOverride,
+        source: "manual",
+      });
+      const nextSetup = getInitialWorkstationSetupForm();
+      setWorkstationSetup(nextSetup);
+      setSavedWorkstationSetup(nextSetup);
+      success("Till point setup saved for this browser");
+    } catch {
+      error("Could not save till point setup in this browser.");
+    }
+  };
+
+  const resetWorkstationSetup = () => {
+    setWorkstationSetup(savedWorkstationSetup);
+  };
+
+  const applySuggestedTillPoint = () => {
+    const suggestedTillPointId = cardTerminalConfig?.workstationHint.suggestedTillPointId;
+    if (!isPosTillPointId(suggestedTillPointId)) {
+      return;
+    }
+    chooseWorkstationTillPoint(suggestedTillPointId);
+  };
+
   const loadSettings = async () => {
     setLoading(true);
     try {
@@ -291,6 +417,29 @@ export const PosSettingsPage = () => {
   useEffect(() => {
     void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCardTerminalConfig = async () => {
+      try {
+        const payload = await apiGet<CardTerminalConfigResponse>("/api/payments/terminal-config");
+        if (!cancelled) {
+          setCardTerminalConfig(payload.config);
+        }
+      } catch {
+        if (!cancelled) {
+          setCardTerminalConfig(null);
+        }
+      }
+    };
+
+    void loadCardTerminalConfig();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -434,6 +583,16 @@ export const PosSettingsPage = () => {
   const resetChanges = () => {
     setSettings(savedSettings);
   };
+
+  const selectedWorkstationTillPoint = workstationSetup.tillPointId
+    ? getPosTillPoint(workstationSetup.tillPointId)
+    : null;
+  const selectedWorkstationTerminalRoute = getCardTerminalRoute(workstationSetup.terminalRouteId);
+  const suggestedTillPoint = isPosTillPointId(cardTerminalConfig?.workstationHint.suggestedTillPointId)
+    ? getPosTillPoint(cardTerminalConfig.workstationHint.suggestedTillPointId)
+    : null;
+  const getConfiguredTerminalId = (routeId: CardTerminalRouteId) =>
+    cardTerminalConfig?.terminalRoutes.find((route) => route.routeId === routeId)?.terminalId ?? null;
 
   return (
     <div className="page-shell ui-page pos-settings-page">
@@ -805,6 +964,106 @@ export const PosSettingsPage = () => {
                   No quick-add buttons are configured. Add one to make it appear on POS.
                 </div>
               )}
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard id="till-workstation-setup" className="store-info-section pos-settings-section pos-workstation-settings-section" as="section">
+          <SectionHeader
+            eyebrow="Till point setup"
+            title="This browser's workstation"
+            description="Assign the browser to a till point and the card-terminal route it should use for POS checkout."
+          />
+          <div className="purchase-form-grid store-info-grid pos-workstation-settings-grid">
+            <label>
+              Assigned till point
+              <select
+                value={workstationSetup.tillPointId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  chooseWorkstationTillPoint(isPosTillPointId(value) ? value : "");
+                }}
+              >
+                <option value="">Not set</option>
+                {POS_TILL_POINTS.map((tillPoint) => (
+                  <option key={tillPoint.id} value={tillPoint.id}>
+                    {tillPoint.label}
+                  </option>
+                ))}
+              </select>
+              <span className="pos-settings-field-note">
+                Saved locally in this browser so a reboot keeps the same till.
+              </span>
+            </label>
+
+            <label>
+              Card terminal route
+              <select
+                value={workstationSetup.terminalRouteId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (isCardTerminalRouteId(value)) {
+                    chooseWorkstationTerminalRoute(value);
+                  }
+                }}
+                disabled={!workstationSetup.tillPointId}
+              >
+                {CARD_TERMINAL_ROUTES.map((route) => (
+                  <option key={route.id} value={route.id}>
+                    {route.label}
+                    {workstationSetup.tillPointId
+                      && route.id === getDefaultTerminalRouteIdForTill(workstationSetup.tillPointId)
+                      ? " (default)"
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="pos-settings-field-note">
+                {selectedWorkstationTillPoint
+                  ? `${selectedWorkstationTillPoint.label} will send card payments to ${selectedWorkstationTerminalRoute.label}.`
+                  : "Set a till point before choosing the terminal route."}
+              </span>
+            </label>
+
+            <div className="store-info-grid-span pos-workstation-settings-status">
+              <div>
+                <span>IP hint</span>
+                <strong>{suggestedTillPoint ? suggestedTillPoint.label : "No suggestion"}</strong>
+                <p>
+                  {cardTerminalConfig?.workstationHint.remoteAddress
+                    ? `Browser address seen as ${cardTerminalConfig.workstationHint.remoteAddress}.`
+                    : "No browser address hint is available from the backend."}
+                </p>
+              </div>
+              {suggestedTillPoint ? (
+                <button type="button" onClick={applySuggestedTillPoint}>
+                  Use suggestion
+                </button>
+              ) : null}
+            </div>
+
+            <fieldset className="store-info-grid-span pos-settings-fieldset pos-terminal-route-fieldset">
+              <legend>Dojo terminal routes</legend>
+              <div className="pos-terminal-route-grid">
+                {CARD_TERMINAL_ROUTES.map((route) => {
+                  const terminalId = getConfiguredTerminalId(route.id);
+                  return (
+                    <div key={route.id} className="pos-terminal-route-row">
+                      <span>{route.label}</span>
+                      <strong>{terminalId ?? "Awaiting Dojo terminal ID"}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="store-info-grid-span actions-inline pos-settings-actions pos-workstation-settings-actions">
+              <button type="button" onClick={resetWorkstationSetup} disabled={!isWorkstationSetupDirty}>
+                Reset browser setup
+              </button>
+              <button type="button" className="primary" onClick={saveWorkstationSetup} disabled={!isWorkstationSetupDirty}>
+                Save browser setup
+              </button>
             </div>
           </div>
         </SurfaceCard>
