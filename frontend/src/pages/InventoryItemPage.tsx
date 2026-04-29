@@ -252,6 +252,7 @@ export const InventoryItemPage = () => {
   const [submittingCount, setSubmittingCount] = useState(false);
   const [sellingPointsDraft, setSellingPointsDraft] = useState("");
   const sellingPointsDraftRef = useRef("");
+  const sellingPointsDraftTouchedRef = useRef(false);
   const [savingSellingPoints, setSavingSellingPoints] = useState(false);
   const [generatingSellingPoints, setGeneratingSellingPoints] = useState(false);
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
@@ -273,8 +274,9 @@ export const InventoryItemPage = () => {
     [normalizedStoredSellingPoints, sellingPointsDraft],
   );
 
-  const updateSellingPointsDraft = (value: string) => {
+  const updateSellingPointsDraft = (value: string, options: { touched?: boolean } = {}) => {
     sellingPointsDraftRef.current = value;
+    sellingPointsDraftTouchedRef.current = options.touched ?? true;
     setSellingPointsDraft(value);
   };
 
@@ -292,7 +294,9 @@ export const InventoryItemPage = () => {
 
       setVariant(variantPayload);
       setStock(stockPayload);
-      updateSellingPointsDraft(variantPayload.product?.keySellingPoints ?? "");
+      if (!sellingPointsDraftTouchedRef.current) {
+        updateSellingPointsDraft(variantPayload.product?.keySellingPoints ?? "", { touched: false });
+      }
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load inventory item";
       error(message);
@@ -345,6 +349,11 @@ export const InventoryItemPage = () => {
       setMovementLoading(false);
     }
   };
+
+  useEffect(() => {
+    sellingPointsDraftTouchedRef.current = false;
+    updateSellingPointsDraft("", { touched: false });
+  }, [variantId]);
 
   useEffect(() => {
     void loadInventoryDetail();
@@ -576,7 +585,7 @@ export const InventoryItemPage = () => {
             }
           : current,
       );
-      updateSellingPointsDraft(updatedProduct.keySellingPoints ?? "");
+      updateSellingPointsDraft(updatedProduct.keySellingPoints ?? "", { touched: false });
       success("Key selling points saved.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Failed to save key selling points";
@@ -632,7 +641,7 @@ export const InventoryItemPage = () => {
         return;
       }
 
-      updateSellingPointsDraft(generatedSellingPoints.join("\n"));
+      updateSellingPointsDraft(generatedSellingPoints.join("\n"), { touched: false });
       success("Selling point suggestions loaded. Review and save when you are happy.");
     } catch (generateError) {
       const message = generateError instanceof Error ? generateError.message : "Failed to generate selling points";

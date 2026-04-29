@@ -744,6 +744,7 @@ model LayawayReservation {
   saleItemId      String    @unique @db.Uuid
   variantId       String
   quantity        Int
+  allocatedQuantity Int     @default(0)
   stockReleasedAt DateTime?
   createdAt       DateTime  @default(now())
 

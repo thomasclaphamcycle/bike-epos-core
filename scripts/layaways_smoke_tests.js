@@ -254,6 +254,16 @@ const run = async () => {
         amountPence: 700,
       },
     });
+    const paidLayawayBeforeCompletion = await apiJson({
+      path: `/api/layaways/${encodeURIComponent(partPaidLayaway.layaway.id)}`,
+    });
+    assert.equal(paidLayawayBeforeCompletion.layaway.status, "PART_PAID");
+    assert.equal(paidLayawayBeforeCompletion.layaway.depositPaidPence, 1200);
+    assert.equal(paidLayawayBeforeCompletion.layaway.remainingPence, 0);
+    const saleBeforeLayawayCompletion = await apiJson({
+      path: `/api/sales/${encodeURIComponent(partPaidLayaway.layaway.saleId)}`,
+    });
+    assert.equal(saleBeforeLayawayCompletion.sale.completedAt, null);
     const completed = await apiJson({
       path: `/api/layaways/${encodeURIComponent(partPaidLayaway.layaway.id)}/complete`,
       method: "POST",

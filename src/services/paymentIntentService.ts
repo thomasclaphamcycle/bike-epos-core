@@ -163,6 +163,26 @@ const ensureSaleExistsTx = async (tx: Prisma.TransactionClient, saleId: string) 
   return sale;
 };
 
+const shouldAutoCompleteCapturedSaleTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+) => {
+  const layaway = await tx.layaway.findUnique({
+    where: { saleId },
+    select: {
+      id: true,
+      completedAt: true,
+      status: true,
+    },
+  });
+
+  if (!layaway) {
+    return true;
+  }
+
+  return layaway.completedAt !== null || layaway.status === "COMPLETED";
+};
+
 const upsertSalePaymentForIntentTx = async (
   tx: Prisma.TransactionClient,
   input: {
@@ -322,7 +342,9 @@ export const createPaymentIntent = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      const saleCompletion = await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await shouldAutoCompleteCapturedSaleTx(tx, intent.saleId)
+        ? await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId))
+        : null;
       return {
         saleCompletion,
         intent: toIntentResponse(intent),
@@ -340,7 +362,12 @@ export const createPaymentIntent = async (
     };
   });
 
-  if ("saleCompletion" in result && "didComplete" in result.saleCompletion && result.saleCompletion.didComplete) {
+  if (
+    "saleCompletion" in result
+    && result.saleCompletion
+    && "didComplete" in result.saleCompletion
+    && result.saleCompletion.didComplete
+  ) {
     emitSaleCompletedEvent(result.saleCompletion);
   }
 
@@ -388,7 +415,9 @@ export const capturePaymentIntentById = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      const saleCompletion = await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await shouldAutoCompleteCapturedSaleTx(tx, intent.saleId)
+        ? await completeSaleIfEligibleTx(tx, intent.saleId, toCompleteSaleInput(staffActorId))
+        : null;
 
       const salePayment = await getSalePaymentSummaryTx(tx, intent.saleId);
       return {
@@ -441,7 +470,9 @@ export const capturePaymentIntentById = async (
         ...(staffActorId ? { createdByStaffId: staffActorId } : {}),
       });
 
-      const saleCompletion = await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId));
+      const saleCompletion = await shouldAutoCompleteCapturedSaleTx(tx, updated.saleId)
+        ? await completeSaleIfEligibleTx(tx, updated.saleId, toCompleteSaleInput(staffActorId))
+        : null;
       return {
         saleCompletion,
         intent: toIntentResponse(updated),
@@ -458,7 +489,12 @@ export const capturePaymentIntentById = async (
     };
   });
 
-  if ("saleCompletion" in result && "didComplete" in result.saleCompletion && result.saleCompletion.didComplete) {
+  if (
+    "saleCompletion" in result
+    && result.saleCompletion
+    && "didComplete" in result.saleCompletion
+    && result.saleCompletion.didComplete
+  ) {
     emitSaleCompletedEvent(result.saleCompletion);
   }
 
