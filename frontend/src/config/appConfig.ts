@@ -51,6 +51,10 @@ export type AppConfig = {
     requireLineNotes: boolean;
     scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
     quickAddEnabled: boolean;
+    quickAddProducts: Array<{
+      label: string;
+      query: string;
+    }>;
     duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
     enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
     splitPaymentsEnabled: boolean;
@@ -127,6 +131,14 @@ const DEFAULT_APP_CONFIG: AppConfig = {
     requireLineNotes: false,
     scanQuantityMode: "INCREMENT_ONE",
     quickAddEnabled: true,
+    quickAddProducts: [
+      { label: "Inner Tube", query: "Inner Tube" },
+      { label: "Chain Lube", query: "Chain Lube" },
+      { label: "Brake Pads", query: "Brake Pads" },
+      { label: "Helmet", query: "Helmet" },
+      { label: "Floor Pump", query: "Floor Pump" },
+      { label: "City Bike", query: "City Bike" },
+    ],
     duplicateScanBehavior: "INCREMENT_QUANTITY",
     enabledTenderMethods: ["CARD", "CASH"],
     splitPaymentsEnabled: true,

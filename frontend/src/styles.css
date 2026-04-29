@@ -10875,6 +10875,27 @@ button.primary.workshop-status-action {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+.pos-quick-add-settings-panel,
+.pos-quick-add-settings-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pos-quick-add-settings-row {
+  align-items: start;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid #d8e1ec;
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(220px, 1.4fr) auto;
+  padding: 12px;
+}
+
+.pos-quick-add-remove {
+  align-self: end;
+}
+
 .pos-settings-actions {
   justify-content: flex-end;
 }
@@ -16469,6 +16490,14 @@ body.rota-row-drag-copy-active {
 
   .store-info-grid-span {
     grid-column: span 1;
+  }
+
+  .pos-quick-add-settings-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-quick-add-remove {
+    justify-self: start;
   }
 
   .store-opening-hours-row {

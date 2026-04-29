@@ -81,6 +81,7 @@ const SETTINGS_KEYS = [
   "pos.requireLineNotes",
   "pos.scanQuantityMode",
   "pos.quickAddEnabled",
+  "pos.quickAddProducts",
   "pos.duplicateScanBehavior",
   "pos.enabledTenderMethods",
   "pos.splitPaymentsEnabled",
@@ -170,6 +171,14 @@ const run = async () => {
     assert.equal(defaultRes.json.settings.pos.requireLineNotes, false);
     assert.equal(defaultRes.json.settings.pos.scanQuantityMode, "INCREMENT_ONE");
     assert.equal(defaultRes.json.settings.pos.quickAddEnabled, true);
+    assert.deepEqual(defaultRes.json.settings.pos.quickAddProducts, [
+      { label: "Inner Tube", query: "Inner Tube" },
+      { label: "Chain Lube", query: "Chain Lube" },
+      { label: "Brake Pads", query: "Brake Pads" },
+      { label: "Helmet", query: "Helmet" },
+      { label: "Floor Pump", query: "Floor Pump" },
+      { label: "City Bike", query: "City Bike" },
+    ]);
     assert.equal(defaultRes.json.settings.pos.duplicateScanBehavior, "INCREMENT_QUANTITY");
     assert.deepEqual(defaultRes.json.settings.pos.enabledTenderMethods, ["CARD", "CASH"]);
     assert.equal(defaultRes.json.settings.pos.splitPaymentsEnabled, true);
@@ -317,6 +326,10 @@ const run = async () => {
           requireLineNotes: true,
           scanQuantityMode: "PROMPT_QUANTITY",
           quickAddEnabled: false,
+          quickAddProducts: [
+            { label: "Workshop Tube", query: "TUBE-700C" },
+            { label: "Premium Lube", query: "Chain Lube" },
+          ],
           duplicateScanBehavior: "PROMPT",
           enabledTenderMethods: ["CARD", "CASH", "STORE_CREDIT", "BANK_TRANSFER"],
           splitPaymentsEnabled: false,
@@ -391,6 +404,10 @@ const run = async () => {
     assert.equal(patchRes.json.settings.pos.requireLineNotes, true);
     assert.equal(patchRes.json.settings.pos.scanQuantityMode, "PROMPT_QUANTITY");
     assert.equal(patchRes.json.settings.pos.quickAddEnabled, false);
+    assert.deepEqual(patchRes.json.settings.pos.quickAddProducts, [
+      { label: "Workshop Tube", query: "TUBE-700C" },
+      { label: "Premium Lube", query: "Chain Lube" },
+    ]);
     assert.equal(patchRes.json.settings.pos.duplicateScanBehavior, "PROMPT");
     assert.deepEqual(patchRes.json.settings.pos.enabledTenderMethods, [
       "CARD",
@@ -454,6 +471,10 @@ const run = async () => {
     );
     assert.equal(persistedPublicConfigRes.json.config.operations.dashboardWeatherEnabled, false);
     assert.equal(persistedPublicConfigRes.json.config.pos.defaultSaleType, "QUOTE");
+    assert.deepEqual(persistedPublicConfigRes.json.config.pos.quickAddProducts, [
+      { label: "Workshop Tube", query: "TUBE-700C" },
+      { label: "Premium Lube", query: "Chain Lube" },
+    ]);
     assert.equal(persistedPublicConfigRes.json.config.pos.compactBasketView, true);
     assert.equal("commercialSuggestionsEnabled" in persistedPublicConfigRes.json.config.workshop, false);
 

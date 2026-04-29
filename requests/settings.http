@@ -38,6 +38,11 @@ X-Staff-Id: demo-admin
     "requireLineNotes": false,
     "scanQuantityMode": "INCREMENT_ONE",
     "quickAddEnabled": true,
+    "quickAddProducts": [
+      { "label": "Inner Tube", "query": "Inner Tube" },
+      { "label": "Chain Lube", "query": "Chain Lube" },
+      { "label": "Brake Pads", "query": "Brake Pads" }
+    ],
     "duplicateScanBehavior": "INCREMENT_QUANTITY",
     "enabledTenderMethods": ["CARD", "CASH", "STORE_CREDIT"],
     "splitPaymentsEnabled": true,
