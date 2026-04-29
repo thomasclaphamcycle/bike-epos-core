@@ -173,28 +173,32 @@ Windows self-hosted deploy and rollback now use the same repo-controlled release
 
 1. keep durable release state under `C:\CorePOS\.corepos-runtime\`
    - including `last-backup.json` after each verified backup
-2. for deploy, force-sync the checkout with:
+2. for deploy, take a fresh PostgreSQL custom-format backup before the release guard runs
+   - default backup folder: `C:\CorePOSBackups`
+   - metadata marker: `C:\CorePOS\.corepos-runtime\last-backup.json`
+   - the marker is written by Node as plain UTF-8 JSON so the deploy guard can parse it reliably
+3. for deploy, force-sync the checkout with:
    - `git fetch origin --prune`
    - `git reset --hard origin/main`
    - `git clean -fd`
-3. for rollback, select either:
+4. for rollback, select either:
    - `previous_safe` for the last rollback-safe release
    - `recovery_mode` only after restoring a verified database backup
-4. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-5. verify:
+5. run `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
+6. verify:
    - `http://127.0.0.1:3100/health?details=1`
    - `http://127.0.0.1:3100/api/system/version`
    - `http://127.0.0.1:3100/login`
-6. confirm the running revision matches the selected rollback target during rollback
-7. only after the health checks pass, record the release as known-good
-8. if deploy or rollback fails, the workflow surfaces:
+7. confirm the running revision matches the selected rollback target during rollback
+8. only after the health checks pass, record the release as known-good
+9. if deploy or rollback fails, the workflow surfaces:
    - the current checkout commit hash
    - the target commit hash when known
    - PM2/process diagnostics when available
    - direct endpoint probe output
    - a release summary for the incident record
 
-9. smoke-check:
+10. smoke-check:
    - `/login`
    - `/home`
    - `/pos`
