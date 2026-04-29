@@ -304,6 +304,7 @@ type CompletedSaleState = {
   receiptUrl: string;
   changeDuePence: number;
   tenderMethod: TenderMethod;
+  customerId: string | null;
   customerName: string | null;
   customerEmail: string | null;
   cashTenderedPence: number | null;
@@ -604,6 +605,7 @@ export const PosPage = () => {
   const customerResultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const newCustomerNameInputRef = useRef<HTMLInputElement | null>(null);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
+  const completedSaleEmailInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
   const cardTerminalPollTimeoutRef = useRef<number | null>(null);
   const pendingQuerySyncFrameRef = useRef<number | null>(null);
@@ -654,6 +656,9 @@ export const PosPage = () => {
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
   const [printingReceipt, setPrintingReceipt] = useState(false);
+  const [completedSaleEmailEditing, setCompletedSaleEmailEditing] = useState(false);
+  const [completedSaleEmailDraft, setCompletedSaleEmailDraft] = useState("");
+  const [savingCompletedSaleEmail, setSavingCompletedSaleEmail] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -736,6 +741,21 @@ export const PosPage = () => {
       setPaymentBasketExpanded(false);
     }
   }, [checkoutMode]);
+
+  useEffect(() => {
+    if (!completedSaleEmailEditing) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      completedSaleEmailInputRef.current?.focus();
+      completedSaleEmailInputRef.current?.select();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [completedSaleEmailEditing]);
 
   useEffect(() => {
     if (!enabledTenderMethods.includes(selectedTenderMethod)) {
@@ -2142,6 +2162,7 @@ export const PosPage = () => {
       receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
       changeDuePence: result.changeDuePence,
       tenderMethod: "CARD",
+      customerId: sale.sale.customer?.id ?? selectedCustomer?.id ?? null,
       customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
       customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
       cashTenderedPence: null,
@@ -2466,6 +2487,7 @@ export const PosPage = () => {
         receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
         changeDuePence: result.changeDuePence,
         tenderMethod: selectedTenderMethod,
+        customerId: sale.sale.customer?.id ?? selectedCustomer?.id ?? null,
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
         customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
         cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
@@ -2509,6 +2531,61 @@ export const PosPage = () => {
       error(getManagedReceiptPrintErrorMessage(printError));
     } finally {
       setPrintingReceipt(false);
+    }
+  };
+
+  const startCompletedSaleEmailEdit = () => {
+    const existingEmail = completedSale?.customerEmail ?? selectedCustomer?.email ?? "";
+    setCompletedSaleEmailDraft(existingEmail);
+    setCompletedSaleEmailEditing(true);
+  };
+
+  const cancelCompletedSaleEmailEdit = () => {
+    setCompletedSaleEmailEditing(false);
+    setCompletedSaleEmailDraft("");
+  };
+
+  const saveCompletedSaleEmail = async () => {
+    const customerId = completedSale?.customerId ?? selectedCustomer?.id ?? null;
+    const emailValue = completedSaleEmailDraft.trim().toLowerCase();
+
+    if (!customerId) {
+      error("Attach a customer before adding an email receipt.");
+      return;
+    }
+
+    if (!emailValue) {
+      error("Enter an email address for the customer.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+      error("Enter a valid email address.");
+      return;
+    }
+
+    setSavingCompletedSaleEmail(true);
+    try {
+      const updatedCustomer = await apiPatch<CustomerSearchRow>(
+        `/api/customers/${encodeURIComponent(customerId)}`,
+        { email: emailValue },
+      );
+      setSelectedCustomer((current) => current && current.id === updatedCustomer.id
+        ? { ...current, ...updatedCustomer }
+        : current);
+      setCompletedSale((current) => current ? {
+        ...current,
+        customerId: updatedCustomer.id,
+        customerName: updatedCustomer.name,
+        customerEmail: updatedCustomer.email,
+      } : current);
+      setCompletedSaleEmailEditing(false);
+      setCompletedSaleEmailDraft("");
+      success("Customer email saved.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save customer email.");
+    } finally {
+      setSavingCompletedSaleEmail(false);
     }
   };
 
@@ -2818,6 +2895,7 @@ export const PosPage = () => {
 
   const completedSaleReceiptUrl = completedSale ? toBackendUrl(completedSale.receiptUrl) : "";
   const completedSaleCustomerEmail = completedSale?.customerEmail ?? selectedCustomer?.email ?? null;
+  const completedSaleEmailCustomerId = completedSale?.customerId ?? selectedCustomer?.id ?? null;
   const completedSaleEmailHref = completedSaleCustomerEmail
     ? `mailto:${encodeURIComponent(completedSaleCustomerEmail)}?subject=${encodeURIComponent("Your CorePOS receipt")}&body=${encodeURIComponent(`Thanks for your purchase.\n\nYour receipt is available here:\n${completedSaleReceiptUrl}`)}`
     : null;
@@ -2872,8 +2950,42 @@ export const PosPage = () => {
               <small>{completedSaleCustomerEmail}</small>
             </span>
           </a>
+        ) : completedSaleEmailEditing ? (
+          <form
+            className="success-receipt-email-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveCompletedSaleEmail();
+            }}
+          >
+            <label htmlFor="completed-sale-email">
+              <span>Add customer email</span>
+              <input
+                ref={completedSaleEmailInputRef}
+                id="completed-sale-email"
+                type="email"
+                value={completedSaleEmailDraft}
+                onChange={(event) => setCompletedSaleEmailDraft(event.target.value)}
+                placeholder="customer@email.com"
+                autoComplete="email"
+              />
+            </label>
+            <div className="success-receipt-email-form__actions">
+              <button type="submit" className="primary" disabled={savingCompletedSaleEmail}>
+                {savingCompletedSaleEmail ? "Saving..." : "Save email"}
+              </button>
+              <button type="button" onClick={cancelCompletedSaleEmailEdit} disabled={savingCompletedSaleEmail}>
+                Cancel
+              </button>
+            </div>
+          </form>
         ) : (
-          <button type="button" className="success-receipt-action success-receipt-action--email" disabled>
+          <button
+            type="button"
+            className="success-receipt-action success-receipt-action--email"
+            onClick={startCompletedSaleEmailEdit}
+            disabled={!completedSaleEmailCustomerId}
+          >
             <span className="success-receipt-action__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M4 7.5h16v10H4z" />
@@ -2881,8 +2993,8 @@ export const PosPage = () => {
               </svg>
             </span>
             <span>
-              <strong>Email receipt</strong>
-              <small>No email on customer</small>
+              <strong>Add email receipt</strong>
+              <small>{completedSaleEmailCustomerId ? "No email on customer" : "Attach customer first"}</small>
             </span>
           </button>
         )}

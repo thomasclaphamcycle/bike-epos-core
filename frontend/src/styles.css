@@ -14315,6 +14315,55 @@ body.rota-row-drag-copy-active {
   color: rgba(255, 255, 255, 0.92);
 }
 
+.success-receipt-email-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(13, 38, 58, 0.78);
+  background:
+    linear-gradient(180deg, #173247, #0d2335),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.12), transparent 42%);
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 18px rgba(20, 96, 62, 0.08);
+}
+
+.success-receipt-email-form label {
+  display: grid;
+  gap: 6px;
+  color: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.success-receipt-email-form input {
+  width: 100%;
+  min-height: 42px;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.96);
+  color: #102337;
+  font-size: 0.95rem;
+}
+
+.success-receipt-email-form__actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.success-receipt-email-form__actions button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.success-receipt-email-form__actions button:not(.primary) {
+  background: rgba(255, 255, 255, 0.9);
+  color: #173247;
+}
+
 .success-receipt-action__icon {
   display: grid;
   width: 54px;
