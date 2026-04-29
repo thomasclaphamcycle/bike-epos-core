@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 import {
+  createVoucherProviderHandler,
   createRegisteredPrinterHandler,
   listBikeTagPrintAgentSettingsHandler,
   listProductLabelPrintAgentSettingsHandler,
@@ -11,6 +12,7 @@ import {
   listShippingProvidersHandler,
   listSettingsHandler,
   listStoreInfoHandler,
+  listVoucherProvidersHandler,
   removeStoreLogoHandler,
   setDefaultBikeTagPrinterHandler,
   setDefaultProductLabelPrinterHandler,
@@ -27,12 +29,16 @@ import {
   updateShippingProviderSettingsHandler,
   updateSettingsHandler,
   updateStoreInfoHandler,
+  updateVoucherProviderHandler,
 } from "../controllers/settingsController";
 
 export const settingsRouter = Router();
 
 settingsRouter.get("/", requireRoleAtLeast("MANAGER"), listSettingsHandler);
 settingsRouter.patch("/", requireRoleAtLeast("MANAGER"), updateSettingsHandler);
+settingsRouter.get("/voucher-providers", requireRoleAtLeast("STAFF"), listVoucherProvidersHandler);
+settingsRouter.post("/voucher-providers", requireRoleAtLeast("ADMIN"), createVoucherProviderHandler);
+settingsRouter.patch("/voucher-providers/:providerId", requireRoleAtLeast("ADMIN"), updateVoucherProviderHandler);
 settingsRouter.get("/shipping-providers", requireRoleAtLeast("MANAGER"), listShippingProvidersHandler);
 settingsRouter.put("/shipping-providers/default", requireRoleAtLeast("ADMIN"), setDefaultShippingProviderHandler);
 settingsRouter.put("/shipping-providers/:providerKey", requireRoleAtLeast("ADMIN"), updateShippingProviderSettingsHandler);

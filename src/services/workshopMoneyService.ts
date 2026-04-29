@@ -29,9 +29,9 @@ type RefundPaymentInput = {
 };
 
 type CreditIdentityInput = {
-  customerId?: string | null;
-  email?: string | null;
-  phone?: string | null;
+  customerId?: string | null | undefined;
+  email?: string | null | undefined;
+  phone?: string | null | undefined;
 };
 
 type IssueCreditInput = CreditIdentityInput & {
@@ -47,6 +47,14 @@ type ApplyCreditInput = CreditIdentityInput & {
   amountPence?: number;
   notes?: string;
   idempotencyKey?: string;
+};
+
+type IssueSaleOverpaymentCreditInput = {
+  saleId: string;
+  customerId?: string | null;
+  amountPence?: number;
+  paymentMethod?: PaymentMethod;
+  sourceLabel?: string;
 };
 
 const SERIALIZABLE_RETRY_LIMIT = 3;
@@ -65,8 +73,8 @@ const optionalLowercase = (value: string | null | undefined): string | undefined
   return normalized ? normalized.toLowerCase() : undefined;
 };
 
-const toPositiveIntOrThrow = (value: number | undefined, field: string) => {
-  if (!Number.isInteger(value) || (value ?? 0) <= 0) {
+const toPositiveIntOrThrow = (value: number | undefined, field: string): number => {
+  if (value === undefined || !Number.isInteger(value) || value <= 0) {
     throw new HttpError(400, `${field} must be a positive integer`, "INVALID_AMOUNT");
   }
   return value;
@@ -83,6 +91,8 @@ const isRetryableSerializableError = (error: unknown) => {
   const prismaError = error as { code?: string };
   return prismaError?.code === "P2034";
 };
+
+const toNullableText = (value: string | null | undefined): string | null => normalizeText(value) ?? null;
 
 const withSerializableTransaction = async <T>(
   fn: (tx: SerializableTx) => Promise<T>,
@@ -200,9 +210,9 @@ const getOrCreateCreditAccountTx = async (
   try {
     return await tx.creditAccount.create({
       data: {
-        customerId,
-        email,
-        phone,
+        customerId: customerId ?? null,
+        email: email ?? null,
+        phone: phone ?? null,
       },
     });
   } catch (error) {
@@ -253,9 +263,9 @@ const createRefundTx = async (
   input: {
     amountPence: number;
     reason: string;
-    status?: RefundStatus;
-    processorRefundId?: string;
-    idempotencyKey?: string;
+    status?: RefundStatus | undefined;
+    processorRefundId?: string | undefined;
+    idempotencyKey?: string | undefined;
   },
   auditActor?: AuditActor,
 ) => {
@@ -301,8 +311,8 @@ const createRefundTx = async (
       amountPence: input.amountPence,
       reason: input.reason,
       status: input.status ?? "RECORDED",
-      processorRefundId: input.processorRefundId,
-      idempotencyKey: input.idempotencyKey,
+      processorRefundId: input.processorRefundId ?? null,
+      idempotencyKey: input.idempotencyKey ?? null,
     },
   });
 
@@ -324,7 +334,7 @@ const createRefundTx = async (
     paymentRefundId: refund.id,
     amountPence: refund.amountPence,
     saleId: payment.saleId,
-    createdByStaffId: auditActor?.actorId,
+    ...(auditActor?.actorId ? { createdByStaffId: auditActor.actorId } : {}),
   });
 
   await createAuditEventTx(
@@ -540,7 +550,7 @@ const cancelWorkshopJobTx = async (
           sourceRef: workshopJob.id,
           idempotencyKey:
             normalizeText(input.idempotencyKey) ?? `cancellation-credit:${workshopJob.id}`,
-          notes: normalizeText(input.notes),
+          notes: toNullableText(input.notes),
         },
       });
       creditLedgerEntryId = creditEntry.id;
@@ -560,7 +570,7 @@ const cancelWorkshopJobTx = async (
       data: {
         workshopJobId: workshopJob.id,
         outcome,
-        notes: normalizeText(input.notes),
+        notes: toNullableText(input.notes),
         paymentRefundId,
         creditAccountId,
         creditLedgerEntryId,
@@ -620,13 +630,13 @@ const resolveSaleForCreditApplyTx = async (
     throw new HttpError(400, "Invalid workshop job id", "INVALID_WORKSHOP_JOB_ID");
   }
 
-  const sale = saleId
+  const sale: Prisma.SaleGetPayload<{ include: { customer: true } }> | null = saleId
     ? await tx.sale.findUnique({
         where: { id: saleId },
         include: { customer: true },
       })
     : await tx.sale.findUnique({
-        where: { workshopJobId },
+        where: { workshopJobId: workshopJobId as string },
         include: { customer: true },
       });
 
@@ -921,7 +931,7 @@ export const issueCredit = async (input: IssueCreditInput, auditActor?: AuditAct
           sourceType: "MANUAL_ISSUE",
           sourceRef: normalizeText(input.sourceRef) ?? issuePayment.id,
           idempotencyKey,
-          notes: normalizeText(input.notes),
+          notes: toNullableText(input.notes),
         },
       });
     } catch (error) {
@@ -979,6 +989,110 @@ export const issueCredit = async (input: IssueCreditInput, auditActor?: AuditAct
       idempotent: false,
     };
   });
+};
+
+export const issueSaleOverpaymentCreditTx = async (
+  tx: SerializableTx,
+  input: IssueSaleOverpaymentCreditInput,
+  auditActor?: AuditActor,
+) => {
+  const saleId = toUuidOrThrow(input.saleId, "saleId", "INVALID_SALE_ID");
+  const customerId = input.customerId ?? undefined;
+  if (!customerId) {
+    throw new HttpError(
+      409,
+      "Attach a customer before adding overpayment to store credit",
+      "SALE_OVERPAYMENT_CREDIT_CUSTOMER_REQUIRED",
+    );
+  }
+
+  const amountPence = toPositiveIntOrThrow(input.amountPence, "amountPence");
+  const paymentMethod = input.paymentMethod ?? "CASH";
+  const sourceLabel = normalizeText(input.sourceLabel) ?? "Tender";
+  const creditAccount = await getOrCreateCreditAccountTx(tx, { customerId });
+  const idempotencyKey = `sale-overpayment-credit:${saleId}`;
+
+  const existingEntry = await tx.creditLedgerEntry.findUnique({
+    where: {
+      creditAccountId_idempotencyKey: {
+        creditAccountId: creditAccount.id,
+        idempotencyKey,
+      },
+    },
+    include: { payment: true },
+  });
+
+  if (existingEntry) {
+    if (existingEntry.amountPence !== amountPence) {
+      throw new HttpError(
+        409,
+        "Sale overpayment credit already exists with a different amount",
+        "SALE_OVERPAYMENT_CREDIT_AMOUNT_MISMATCH",
+      );
+    }
+
+    const balancePence = await getCreditAccountBalanceTx(tx, creditAccount.id);
+    return {
+      creditAccountId: creditAccount.id,
+      entryId: existingEntry.id,
+      paymentId: existingEntry.paymentId,
+      amountPence: existingEntry.amountPence,
+      balancePence,
+      idempotent: true,
+    };
+  }
+
+  const issuePayment = await tx.payment.create({
+    data: {
+      saleId,
+      method: paymentMethod,
+      purpose: "CREDIT_ISSUED",
+      status: "COMPLETED",
+      amountPence,
+      providerRef: "SALE_OVERPAYMENT_CREDIT",
+    },
+  });
+
+  const entry = await tx.creditLedgerEntry.create({
+    data: {
+      creditAccountId: creditAccount.id,
+      paymentId: issuePayment.id,
+      amountPence,
+      sourceType: "SALE_OVERPAYMENT",
+      sourceRef: saleId,
+      idempotencyKey,
+      notes: `${sourceLabel} overpayment added to customer store credit from POS checkout`,
+    },
+  });
+
+  const balancePence = await getCreditAccountBalanceTx(tx, creditAccount.id);
+
+  await createAuditEventTx(
+    tx,
+    {
+      action: "CREDIT_ISSUED",
+      entityType: "CREDIT_ACCOUNT",
+      entityId: creditAccount.id,
+      metadata: {
+        entryId: entry.id,
+        paymentId: issuePayment.id,
+        amountPence: entry.amountPence,
+        sourceType: entry.sourceType,
+        sourceRef: entry.sourceRef,
+        saleId,
+      },
+    },
+    auditActor,
+  );
+
+  return {
+    creditAccountId: creditAccount.id,
+    entryId: entry.id,
+    paymentId: issuePayment.id,
+    amountPence: entry.amountPence,
+    balancePence,
+    idempotent: false,
+  };
 };
 
 export const applyCredit = async (input: ApplyCreditInput, auditActor?: AuditActor) => {
@@ -1080,7 +1194,7 @@ export const applyCredit = async (input: ApplyCreditInput, auditActor?: AuditAct
           sourceType: "CREDIT_APPLIED",
           sourceRef: sale.id,
           idempotencyKey,
-          notes: normalizeText(input.notes),
+          notes: toNullableText(input.notes),
         },
       });
     } catch (error) {

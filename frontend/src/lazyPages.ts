@@ -29,6 +29,7 @@ export const HomeRedirectPage = lazyPage(
   "HomeRedirectPage",
 );
 export const PosPage = lazyPage(() => import("./pages/PosPage"), "PosPage");
+export const LayawaysPage = lazyPage(() => import("./pages/LayawaysPage"), "LayawaysPage");
 export const WorkshopPage = lazyPage(() => import("./pages/WorkshopPage"), "WorkshopPage");
 export const WorkshopQueuePage = lazyPage(() => import("./pages/WorkshopQueuePage"), "WorkshopQueuePage");
 export const WorkshopTechnicianPage = lazyPage(
@@ -297,6 +298,7 @@ export const preloadPrimaryRoute = async (path: string) => {
   const preloaders: Array<[matcher: (value: string) => boolean, preload: () => Promise<void>]> = [
     [(value) => value === "/" || value === "/home" || value === "/dashboard", DashboardPage.preload],
     [(value) => value === "/pos", PosPage.preload],
+    [(value) => value === "/pos/layaways", LayawaysPage.preload],
     [(value) => value === "/management/cash", CashOversightPage.preload],
     [(value) => value === "/sales-history/transactions", SalesHistoryPage.preload],
     [(value) => value.startsWith("/sales-history"), NavigationPlaceholderPage.preload],
@@ -336,6 +338,7 @@ export const preloadPrimaryRoute = async (path: string) => {
         || value === "/settings/printers"
         || value === "/settings/workshop"
         || value === "/settings/shipping"
+        || value === "/settings/vouchers"
         || value === "/management/settings",
       SystemSettingsPage.preload,
     ],

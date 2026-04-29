@@ -94,6 +94,8 @@ const run = async () => {
     basketIds: new Set(),
     saleIds: new Set(),
     sessionIds: new Set(),
+    customerIds: new Set(),
+    voucherProviderIds: new Set(),
   };
 
   try {
@@ -106,13 +108,36 @@ const run = async () => {
         name: "M39 Manager",
         email,
         passwordHash,
-        role: "MANAGER",
+        role: "ADMIN",
         isActive: true,
       },
     });
     created.userId = user.id;
 
     const cookie = await login(email, password);
+
+    const voucherProviderResponse = await apiJson({
+      path: "/api/settings/voucher-providers",
+      method: "POST",
+      body: {
+        name: `M39 Voucher Provider ${token}`,
+        commissionBps: 275,
+        isActive: true,
+        notes: "M39 voucher provider smoke test",
+      },
+      cookie,
+    });
+    assert.ok(voucherProviderResponse.provider?.id);
+    assert.equal(voucherProviderResponse.provider.commissionBps, 275);
+    created.voucherProviderIds.add(voucherProviderResponse.provider.id);
+
+    const activeVoucherProviders = await apiJson({
+      path: "/api/settings/voucher-providers?activeOnly=true",
+      cookie,
+    });
+    assert.ok(
+      activeVoucherProviders.providers.some((provider) => provider.id === voucherProviderResponse.provider.id),
+    );
 
     const currentSession = await apiJson({
       path: "/api/till/sessions/current",
@@ -174,18 +199,27 @@ const run = async () => {
       body: {
         variantId: variant.id,
         type: "PURCHASE",
-        quantity: 3,
+        quantity: 5,
         referenceType: "M39_TEST",
         referenceId: `seed_${token}`,
       },
       cookie,
     });
 
-    const createSale = async () => {
+    const customer = await prisma.customer.create({
+      data: {
+        firstName: "M39",
+        lastName: "Credit",
+        email: `m39.credit.${token}@example.com`,
+      },
+    });
+    created.customerIds.add(customer.id);
+
+    const createSale = async (customerId) => {
       const basket = await apiJson({
         path: "/api/baskets",
         method: "POST",
-        body: {},
+        body: customerId ? { customerId } : {},
         cookie,
       });
       created.basketIds.add(basket.id);
@@ -307,9 +341,119 @@ const run = async () => {
     assert.ok(sale3Complete.completedAt);
     assert.equal(sale3Complete.changeDuePence, 500);
 
+    const sale4 = await createSale(customer.id);
+    await apiJson({
+      path: `/api/sales/${encodeURIComponent(sale4.id)}/tenders`,
+      method: "POST",
+      body: {
+        method: "CASH",
+        amountPence: sale4.totalPence + 700,
+      },
+      cookie,
+    });
+
+    const sale4Complete = await apiJson({
+      path: `/api/sales/${encodeURIComponent(sale4.id)}/complete`,
+      method: "POST",
+      body: {
+        overpaymentCredit: {
+          addToStoreCredit: true,
+        },
+      },
+      cookie,
+    });
+    assert.ok(sale4Complete.completedAt);
+    assert.equal(sale4Complete.changeDuePence, 0);
+    assert.equal(sale4Complete.creditedChangePence, 700);
+
+    const sale4Credit = await prisma.creditLedgerEntry.findFirst({
+      where: {
+        sourceType: "SALE_OVERPAYMENT",
+        sourceRef: sale4.id,
+      },
+      include: {
+        creditAccount: true,
+        payment: true,
+      },
+    });
+    assert.ok(sale4Credit);
+    assert.equal(sale4Credit.amountPence, 700);
+    assert.equal(sale4Credit.creditAccount.customerId, customer.id);
+    assert.equal(sale4Credit.payment.saleId, sale4.id);
+    assert.equal(sale4Credit.payment.method, "CASH");
+    assert.equal(sale4Credit.payment.purpose, "CREDIT_ISSUED");
+
+    const creditBalance = await apiJson({
+      path: `/api/credits/balance?customerId=${encodeURIComponent(customer.id)}`,
+      cookie,
+    });
+    assert.equal(creditBalance.balancePence, 700);
+
+    const sale5 = await createSale(customer.id);
+    const sale5Tender = await apiJson({
+      path: `/api/sales/${encodeURIComponent(sale5.id)}/tenders`,
+      method: "POST",
+      body: {
+        method: "VOUCHER",
+        amountPence: sale5.totalPence + 300,
+        voucherProviderId: voucherProviderResponse.provider.id,
+      },
+      cookie,
+    });
+    assert.equal(sale5Tender.tender.voucherProviderId, voucherProviderResponse.provider.id);
+    assert.equal(sale5Tender.tender.voucherCommissionBps, 275);
+    assert.equal(sale5Tender.tender.voucherProvider.name, voucherProviderResponse.provider.name);
+
+    const sale5Complete = await apiJson({
+      path: `/api/sales/${encodeURIComponent(sale5.id)}/complete`,
+      method: "POST",
+      body: {
+        overpaymentCredit: {
+          addToStoreCredit: true,
+        },
+      },
+      cookie,
+    });
+    assert.ok(sale5Complete.completedAt);
+    assert.equal(sale5Complete.changeDuePence, 0);
+    assert.equal(sale5Complete.creditedChangePence, 300);
+
+    const sale5Credit = await prisma.creditLedgerEntry.findFirst({
+      where: {
+        sourceType: "SALE_OVERPAYMENT",
+        sourceRef: sale5.id,
+      },
+      include: {
+        creditAccount: true,
+        payment: true,
+      },
+    });
+    assert.ok(sale5Credit);
+    assert.equal(sale5Credit.amountPence, 300);
+    assert.equal(sale5Credit.creditAccount.customerId, customer.id);
+    assert.equal(sale5Credit.payment.saleId, sale5.id);
+    assert.equal(sale5Credit.payment.method, "OTHER");
+    assert.equal(sale5Credit.payment.purpose, "CREDIT_ISSUED");
+
+    const sale5VoucherTender = await prisma.saleTender.findFirst({
+      where: {
+        saleId: sale5.id,
+        method: "VOUCHER",
+      },
+    });
+    assert.ok(sale5VoucherTender);
+    assert.equal(sale5VoucherTender.voucherProviderId, voucherProviderResponse.provider.id);
+    assert.equal(sale5VoucherTender.voucherCommissionBps, 275);
+
+    const creditBalanceAfterVoucher = await apiJson({
+      path: `/api/credits/balance?customerId=${encodeURIComponent(customer.id)}`,
+      cookie,
+    });
+    assert.equal(creditBalanceAfterVoucher.balancePence, 1000);
+
     const current = await apiJson({ path: "/api/till/sessions/current", cookie });
     assert.ok(current?.session?.id);
-    const expectedCashSales = sale1.totalPence + 400 + sale3.totalPence;
+    const expectedCashSales = sale1.totalPence + 400 + sale3.totalPence + sale4.totalPence + 700;
     assert.equal(current.totals.cashSalesPence, expectedCashSales);
 
     await apiJson({
@@ -332,13 +476,37 @@ const run = async () => {
   } finally {
     const saleIds = Array.from(created.saleIds);
     const basketIds = Array.from(created.basketIds);
+    const overpaymentCreditEntries = saleIds.length > 0
+      ? await prisma.creditLedgerEntry.findMany({
+          where: {
+            sourceType: "SALE_OVERPAYMENT",
+            sourceRef: { in: saleIds },
+          },
+          select: {
+            id: true,
+            creditAccountId: true,
+          },
+        })
+      : [];
+    const overpaymentCreditEntryIds = overpaymentCreditEntries.map((entry) => entry.id);
+    const overpaymentCreditAccountIds = Array.from(
+      new Set(overpaymentCreditEntries.map((entry) => entry.creditAccountId)),
+    );
 
     if (saleIds.length > 0) {
+      if (overpaymentCreditEntryIds.length > 0) {
+        await prisma.creditLedgerEntry.deleteMany({ where: { id: { in: overpaymentCreditEntryIds } } });
+      }
       await prisma.saleTender.deleteMany({ where: { saleId: { in: saleIds } } });
       await prisma.paymentIntent.deleteMany({ where: { saleId: { in: saleIds } } });
       await prisma.payment.deleteMany({ where: { saleId: { in: saleIds } } });
       await prisma.saleItem.deleteMany({ where: { saleId: { in: saleIds } } });
       await prisma.sale.deleteMany({ where: { id: { in: saleIds } } });
+    }
+
+    const voucherProviderIds = Array.from(created.voucherProviderIds);
+    if (voucherProviderIds.length > 0) {
+      await prisma.voucherProvider.deleteMany({ where: { id: { in: voucherProviderIds } } });
     }
 
     if (basketIds.length > 0) {
@@ -355,6 +523,15 @@ const run = async () => {
 
     if (created.productId) {
       await prisma.product.deleteMany({ where: { id: created.productId } });
+    }
+
+    if (overpaymentCreditAccountIds.length > 0) {
+      await prisma.creditAccount.deleteMany({ where: { id: { in: overpaymentCreditAccountIds } } });
+    }
+
+    const customerIds = Array.from(created.customerIds);
+    if (customerIds.length > 0) {
+      await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
     }
 
     if (created.userId) {

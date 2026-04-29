@@ -223,6 +223,31 @@ type ShippingProviderMutationResponse = {
   provider: ShippingProviderSettings;
 };
 
+type VoucherProvider = {
+  id: string;
+  name: string;
+  commissionBps: number;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type VoucherProviderListResponse = {
+  providers: VoucherProvider[];
+};
+
+type VoucherProviderMutationResponse = {
+  provider: VoucherProvider;
+};
+
+type VoucherProviderFormState = {
+  name: string;
+  commissionPercent: string;
+  isActive: boolean;
+  notes: string;
+};
+
 type ShippingProviderFormState = {
   enabled: boolean;
   environment: ShippingProviderEnvironment;
@@ -345,6 +370,13 @@ const DEFAULT_WORKSHOP_COMMERCIAL_SETTINGS: WorkshopCommercialSettings = {
   commercialSuggestionsEnabled: true,
   commercialLongGapDays: 180,
   commercialRecentServiceCooldownDays: 60,
+};
+
+const DEFAULT_VOUCHER_PROVIDER_FORM: VoucherProviderFormState = {
+  name: "",
+  commissionPercent: "0.00",
+  isActive: true,
+  notes: "",
 };
 
 const DEFAULT_PRINTER_FORM: PrinterFormState = {
@@ -587,6 +619,35 @@ const toWorkshopCommercialSettings = (value: unknown): WorkshopCommercialSetting
   };
 };
 
+const formatCommissionBps = (basisPoints: number) => `${(basisPoints / 100).toFixed(2)}%`;
+
+const parseVoucherCommissionPercentToBps = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return 0;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return Math.round(parsed * 100);
+};
+
+const toVoucherProviderFormState = (provider: VoucherProvider | null): VoucherProviderFormState => {
+  if (!provider) {
+    return DEFAULT_VOUCHER_PROVIDER_FORM;
+  }
+
+  return {
+    name: provider.name,
+    commissionPercent: (provider.commissionBps / 100).toFixed(2),
+    isActive: provider.isActive,
+    notes: provider.notes ?? "",
+  };
+};
+
 const toPrinterFormState = (
   printer: RegisteredPrinter | null,
   defaultShippingLabelPrinterId: string | null,
@@ -701,7 +762,7 @@ const formatManagedPrintTimestamp = (value: string | null) => {
   return new Date(value).toLocaleString();
 };
 
-type SystemSettingsPageMode = "store-info" | "printers" | "workshop" | "shipping";
+type SystemSettingsPageMode = "store-info" | "printers" | "workshop" | "shipping" | "vouchers";
 
 type SystemSettingsPageProps = {
   mode?: SystemSettingsPageMode;
@@ -712,6 +773,7 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
   const isPrintersMode = mode === "printers";
   const isWorkshopSettingsMode = mode === "workshop";
   const isShippingSettingsMode = mode === "shipping";
+  const isVoucherSettingsMode = mode === "vouchers";
   const { error, success } = useToasts();
   const [store, setStore] = useState<StoreInfo | null>(null);
   const [initialStore, setInitialStore] = useState<StoreInfo | null>(null);
@@ -721,6 +783,10 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
   const [providerSettingsPayload, setProviderSettingsPayload] = useState<ShippingProviderSettingsListResponse | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState("");
   const [providerForm, setProviderForm] = useState<ShippingProviderFormState>(DEFAULT_SHIPPING_PROVIDER_FORM);
+  const [voucherProvidersPayload, setVoucherProvidersPayload] = useState<VoucherProviderListResponse | null>(null);
+  const [selectedVoucherProviderId, setSelectedVoucherProviderId] = useState("");
+  const [voucherProviderForm, setVoucherProviderForm] =
+    useState<VoucherProviderFormState>(DEFAULT_VOUCHER_PROVIDER_FORM);
   const [shippingPrintAgentConfig, setShippingPrintAgentConfig] = useState<ShippingPrintAgentConfig | null>(null);
   const [shippingPrintAgentForm, setShippingPrintAgentForm] = useState<ShippingPrintAgentFormState>(
     DEFAULT_SHIPPING_PRINT_AGENT_FORM,
@@ -751,6 +817,7 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
   const [removingLogo, setRemovingLogo] = useState(false);
   const [savingWorkshopCommercial, setSavingWorkshopCommercial] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
+  const [savingVoucherProvider, setSavingVoucherProvider] = useState(false);
   const [settingDefaultProvider, setSettingDefaultProvider] = useState(false);
   const [savingShippingPrintAgent, setSavingShippingPrintAgent] = useState(false);
   const [savingBikeTagPrintAgent, setSavingBikeTagPrintAgent] = useState(false);
@@ -768,10 +835,11 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     const load = async () => {
       setLoading(true);
       try {
-        const [
-          storePayload,
+          const [
+            storePayload,
           settingsPayload,
           providerSettingsResponse,
+          voucherProvidersResponse,
           shippingPrintAgentResponse,
           bikeTagPrintAgentResponse,
           receiptPrintAgentResponse,
@@ -780,9 +848,10 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
           printersResponse,
           managedPrintJobsResponse,
         ] = await Promise.all([
-          apiGet<StoreInfoResponse>("/api/settings/store-info"),
+            apiGet<StoreInfoResponse>("/api/settings/store-info"),
           apiGet<SettingsResponse>("/api/settings"),
           apiGet<ShippingProviderSettingsListResponse>("/api/settings/shipping-providers"),
+          apiGet<VoucherProviderListResponse>("/api/settings/voucher-providers"),
           apiGet<ShippingPrintAgentSettingsResponse>("/api/settings/shipping-print-agent"),
           apiGet<BikeTagPrintAgentSettingsResponse>("/api/settings/bike-tag-print-agent"),
           apiGet<ReceiptPrintAgentSettingsResponse>("/api/settings/receipt-print-agent"),
@@ -816,6 +885,14 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
         setProviderForm(
           toShippingProviderFormState(
             providerSettingsResponse.providers.find((provider) => provider.key === preferredProviderKey) ?? null,
+          ),
+        );
+        setVoucherProvidersPayload(voucherProvidersResponse);
+        const preferredVoucherProviderId = voucherProvidersResponse.providers[0]?.id ?? "";
+        setSelectedVoucherProviderId(preferredVoucherProviderId);
+        setVoucherProviderForm(
+          toVoucherProviderFormState(
+            voucherProvidersResponse.providers.find((provider) => provider.id === preferredVoucherProviderId) ?? null,
           ),
         );
         setShippingPrintAgentConfig(shippingPrintAgentResponse.config);
@@ -991,7 +1068,25 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     () => providerSettingsPayload?.providers.find((provider) => provider.key === selectedProviderKey) ?? null,
     [providerSettingsPayload?.providers, selectedProviderKey],
   );
+  const selectedVoucherProvider = useMemo(
+    () => voucherProvidersPayload?.providers.find((provider) => provider.id === selectedVoucherProviderId) ?? null,
+    [voucherProvidersPayload?.providers, selectedVoucherProviderId],
+  );
   const selectedProviderIsEasyPost = selectedProvider?.key === "EASYPOST";
+  const voucherProviderValidationErrors = useMemo(() => {
+    const errors: Partial<Record<keyof VoucherProviderFormState, string>> = {};
+    if (!voucherProviderForm.name.trim()) {
+      errors.name = "Voucher company name is required.";
+    }
+
+    const commissionBps = parseVoucherCommissionPercentToBps(voucherProviderForm.commissionPercent);
+    if (commissionBps === null || commissionBps < 0 || commissionBps > 10000) {
+      errors.commissionPercent = "Use a percentage from 0 to 100.";
+    }
+
+    return errors;
+  }, [voucherProviderForm]);
+  const hasVoucherProviderValidationErrors = Object.keys(voucherProviderValidationErrors).length > 0;
   const providerValidationErrors = useMemo(() => {
     const errors: Partial<Record<keyof ShippingProviderFormState, string>> = {};
     if (!selectedProvider?.requiresConfiguration) {
@@ -1214,6 +1309,13 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     setProviderForm((current) => ({ ...current, [key]: value }));
   };
 
+  const setVoucherProviderField = <K extends keyof VoucherProviderFormState>(
+    key: K,
+    value: VoucherProviderFormState[K],
+  ) => {
+    setVoucherProviderForm((current) => ({ ...current, [key]: value }));
+  };
+
   const setShippingPrintAgentField = <K extends keyof ShippingPrintAgentFormState>(
     key: K,
     value: ShippingPrintAgentFormState[K],
@@ -1318,6 +1420,19 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     return payload;
   };
 
+  const loadVoucherProviders = async (preferredProviderId?: string) => {
+    const payload = await apiGet<VoucherProviderListResponse>("/api/settings/voucher-providers");
+    setVoucherProvidersPayload(payload);
+    const nextProviderId = preferredProviderId ?? payload.providers[0]?.id ?? "";
+    setSelectedVoucherProviderId(nextProviderId);
+    setVoucherProviderForm(
+      toVoucherProviderFormState(
+        payload.providers.find((provider) => provider.id === nextProviderId) ?? null,
+      ),
+    );
+    return payload;
+  };
+
   const loadProductLabelPrintAgentSettings = async () => {
     const payload = await apiGet<ProductLabelPrintAgentSettingsResponse>("/api/settings/product-label-print-agent");
     setProductLabelPrintAgentConfig(payload.config);
@@ -1370,6 +1485,17 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     const provider = providerSettingsPayload?.providers.find((candidate) => candidate.key === providerKey) ?? null;
     setSelectedProviderKey(providerKey);
     setProviderForm(toShippingProviderFormState(provider));
+  };
+
+  const selectVoucherProviderForEditing = (providerId: string) => {
+    const provider = voucherProvidersPayload?.providers.find((candidate) => candidate.id === providerId) ?? null;
+    setSelectedVoucherProviderId(providerId);
+    setVoucherProviderForm(toVoucherProviderFormState(provider));
+  };
+
+  const resetVoucherProviderForm = () => {
+    setSelectedVoucherProviderId("");
+    setVoucherProviderForm({ ...DEFAULT_VOUCHER_PROVIDER_FORM });
   };
 
   const selectPrinterForEditing = (printerId: string) => {
@@ -1740,6 +1866,43 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     }
   };
 
+  const saveVoucherProvider = async () => {
+    if (hasVoucherProviderValidationErrors) {
+      error("Fix the highlighted voucher provider fields before saving.");
+      return;
+    }
+
+    const commissionBps = parseVoucherCommissionPercentToBps(voucherProviderForm.commissionPercent);
+    if (commissionBps === null) {
+      error("Voucher commission must be a valid percentage.");
+      return;
+    }
+
+    const payload = {
+      name: voucherProviderForm.name.trim(),
+      commissionBps,
+      isActive: voucherProviderForm.isActive,
+      notes: voucherProviderForm.notes.trim() || null,
+    };
+
+    setSavingVoucherProvider(true);
+    try {
+      const response = selectedVoucherProviderId
+        ? await apiPatch<VoucherProviderMutationResponse>(
+          `/api/settings/voucher-providers/${encodeURIComponent(selectedVoucherProviderId)}`,
+          payload,
+        )
+        : await apiPost<VoucherProviderMutationResponse>("/api/settings/voucher-providers", payload);
+
+      await loadVoucherProviders(response.provider.id);
+      success(selectedVoucherProviderId ? "Voucher provider updated." : "Voucher provider created.");
+    } catch (saveError) {
+      error(saveError instanceof Error ? saveError.message : "Failed to save voucher provider");
+    } finally {
+      setSavingVoucherProvider(false);
+    }
+  };
+
   const updateDefaultShippingProvider = async (providerKey: string | null) => {
     setSettingDefaultProvider(true);
     try {
@@ -2005,41 +2168,48 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
     <div className="page-shell ui-page">
       <SurfaceCard className="store-info-hero" tone="soft">
         <PageHeader
-          eyebrow={
+            eyebrow={
             isPrintersMode
               ? "Settings / Printers"
               : isWorkshopSettingsMode
                 ? "Settings / Workshop"
                 : isShippingSettingsMode
                   ? "Settings / Shipping"
-                  : "Settings / Store Info"
-          }
-          title={
+                  : isVoucherSettingsMode
+                    ? "Settings / Vouchers"
+                    : "Settings / Store Info"
+            }
+            title={
             isPrintersMode
               ? "Printers"
               : isWorkshopSettingsMode
                 ? "Workshop Settings"
                 : isShippingSettingsMode
                   ? "Shipping"
-                  : "Store Info"
-          }
-          description={
+                  : isVoucherSettingsMode
+                    ? "Voucher Providers"
+                    : "Store Info"
+            }
+            description={
             isPrintersMode
               ? "Registered printers, workstation defaults, managed queue controls, and helper URLs for receipts, labels, bike tags, and dispatch printing."
               : isWorkshopSettingsMode
                 ? "Workshop workflow settings for service prompts, commercial suggestions, and job-facing behavior."
                 : isShippingSettingsMode
                   ? "Courier/provider configuration for shipment creation, label buying, and dispatch defaults."
-                  : "Central business identity settings for customer communications, opening hours, printed documents, and future storefront surfaces."
-          }
+                  : isVoucherSettingsMode
+                    ? "Voucher company setup for POS selection and future commission-aware reporting."
+                    : "Central business identity settings for customer communications, opening hours, printed documents, and future storefront surfaces."
+            }
           actions={(
             <div className="actions-inline">
               {!isStoreInfoMode ? <Link to="/settings/store-info">Store Info</Link> : null}
-              {!isPrintersMode ? <Link to="/settings/printers">Printers</Link> : null}
-              {!isWorkshopSettingsMode ? <Link to="/settings/workshop">Workshop</Link> : null}
-              {!isShippingSettingsMode ? <Link to="/settings/shipping">Shipping</Link> : null}
-            </div>
-          )}
+                {!isPrintersMode ? <Link to="/settings/printers">Printers</Link> : null}
+                {!isWorkshopSettingsMode ? <Link to="/settings/workshop">Workshop</Link> : null}
+                {!isShippingSettingsMode ? <Link to="/settings/shipping">Shipping</Link> : null}
+              {!isVoucherSettingsMode ? <Link to="/settings/vouchers">Vouchers</Link> : null}
+              </div>
+            )}
         />
 
         {isPrintersMode ? (
@@ -2099,7 +2269,7 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
             </div>
           </>
         ) : isShippingSettingsMode ? (
-          <>
+            <>
             <div className="dashboard-summary-grid">
               <div className="metric-card">
                 <span className="metric-label">Default Provider</span>
@@ -2124,11 +2294,39 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
               </div>
             </div>
 
+              <div className="restricted-panel info-panel">
+                Shipping Settings keeps courier/provider choices separate from Store Info and printer hardware setup.
+              </div>
+            </>
+        ) : isVoucherSettingsMode ? (
+          <>
+            <div className="dashboard-summary-grid">
+              <div className="metric-card">
+                <span className="metric-label">Active Providers</span>
+                <strong className="metric-value">
+                  {voucherProvidersPayload ? voucherProvidersPayload.providers.filter((provider) => provider.isActive).length : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Voucher companies available in POS</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Total Providers</span>
+                <strong className="metric-value">{voucherProvidersPayload?.providers.length ?? "-"}</strong>
+                <span className="dashboard-metric-detail">Saved provider records including inactive entries</span>
+              </div>
+              <div className="metric-card">
+                <span className="metric-label">Selected Rate</span>
+                <strong className="metric-value">
+                  {selectedVoucherProvider ? formatCommissionBps(selectedVoucherProvider.commissionBps) : "-"}
+                </strong>
+                <span className="dashboard-metric-detail">Commission snapshot used for new voucher tenders</span>
+              </div>
+            </div>
+
             <div className="restricted-panel info-panel">
-              Shipping Settings keeps courier/provider choices separate from Store Info and printer hardware setup.
+              Voucher Providers keeps third-party voucher names and commission rates ready for POS tender selection.
             </div>
           </>
-        ) : (
+          ) : (
           <>
             <div className="dashboard-summary-grid">
               <div className="metric-card">
@@ -2157,8 +2355,8 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
         )}
       </SurfaceCard>
 
-      {isStoreInfoMode ? (
-        <>
+        {isStoreInfoMode ? (
+          <>
       <SurfaceCard className="store-info-card">
         <SectionHeader
           title="Business Details"
@@ -2483,11 +2681,131 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
           </div>
         ) : null}
       </SurfaceCard>
-        </>
+          </>
+        ) : null}
+
+      {isVoucherSettingsMode ? (
+        <SurfaceCard className="store-info-card">
+          <SectionHeader
+            title="Voucher Providers"
+            description="Maintain the voucher companies staff can choose on POS voucher payments, including the commission rate snapshot for later reporting."
+            actions={(
+              <div className="actions-inline">
+                <button
+                  type="button"
+                  className="button-link"
+                  onClick={resetVoucherProviderForm}
+                  disabled={savingVoucherProvider}
+                >
+                  New Provider
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void saveVoucherProvider()}
+                  disabled={savingVoucherProvider || hasVoucherProviderValidationErrors}
+                >
+                  {savingVoucherProvider ? "Saving..." : selectedVoucherProvider ? "Save Provider" : "Create Provider"}
+                </button>
+              </div>
+            )}
+          />
+
+          {loading ? (
+            <EmptyState
+              title="Loading Voucher Providers"
+              description="Fetching voucher companies and commission rates."
+            />
+          ) : (
+            <div className="store-info-sections">
+              <section className="store-info-section dispatch-printers-list">
+                <h3>Providers</h3>
+                {voucherProvidersPayload?.providers.length ? (
+                  <div className="dispatch-printers-list__items">
+                    {voucherProvidersPayload.providers.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        className={`dispatch-printer-row${provider.id === selectedVoucherProviderId ? " dispatch-printer-row--selected" : ""}`}
+                        onClick={() => selectVoucherProviderForEditing(provider.id)}
+                      >
+                        <div className="dispatch-printer-row__topline">
+                          <strong>{provider.name}</strong>
+                          <span>{formatCommissionBps(provider.commissionBps)}</span>
+                        </div>
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
+                          <span>{provider.isActive ? "Active in POS" : "Inactive"}</span>
+                          <span>{provider.notes || "No notes"}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="No voucher providers yet"
+                    description="Create the first provider so POS voucher tenders can record which company issued the voucher."
+                  />
+                )}
+              </section>
+
+              <section className="store-info-section">
+                <h3>{selectedVoucherProvider ? "Edit Provider" : "Create Provider"}</h3>
+                <div className="purchase-form-grid store-info-grid">
+                  <label>
+                    Voucher company
+                    <input
+                      value={voucherProviderForm.name}
+                      onChange={(event) => setVoucherProviderField("name", event.target.value)}
+                      placeholder="Cycle to Work Partner"
+                    />
+                    {voucherProviderValidationErrors.name ? (
+                      <span className="field-error">{voucherProviderValidationErrors.name}</span>
+                    ) : null}
+                  </label>
+                  <label>
+                    Commission rate %
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.01}
+                      value={voucherProviderForm.commissionPercent}
+                      onChange={(event) => setVoucherProviderField("commissionPercent", event.target.value)}
+                      placeholder="2.50"
+                    />
+                    {voucherProviderValidationErrors.commissionPercent ? (
+                      <span className="field-error">{voucherProviderValidationErrors.commissionPercent}</span>
+                    ) : null}
+                  </label>
+                  <label className="store-settings-checkbox">
+                    <span>Available in POS</span>
+                    <div className="table-secondary">
+                      Inactive providers stay on old tenders but are hidden from new voucher payments.
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={voucherProviderForm.isActive}
+                      onChange={(event) => setVoucherProviderField("isActive", event.target.checked)}
+                    />
+                  </label>
+                  <label className="store-info-grid-span">
+                    Notes
+                    <textarea
+                      rows={3}
+                      value={voucherProviderForm.notes}
+                      onChange={(event) => setVoucherProviderField("notes", event.target.value)}
+                      placeholder="Scheme reference, claim portal, reconciliation note, or payment terms."
+                    />
+                  </label>
+                </div>
+              </section>
+            </div>
+          )}
+        </SurfaceCard>
       ) : null}
 
-      {isWorkshopSettingsMode ? (
-        <>
+        {isWorkshopSettingsMode ? (
+          <>
       <SurfaceCard>
         <SectionHeader
           title="Workshop Commercial Suggestions"

@@ -17,6 +17,7 @@ import {
 } from "./tillService";
 import { buildPosSaleSourceSummary } from "./posSaleSource";
 import { getBasketById } from "./basketService";
+import { issueSaleOverpaymentCreditTx } from "./workshopMoneyService";
 
 type CheckoutPaymentInput = {
   paymentMethod?: PaymentMethod;
@@ -44,6 +45,8 @@ type CompleteSaleInput = {
   requireCapturedIntent?: boolean;
   requireTenders?: boolean;
   staffActorId?: string;
+  addOverpaymentToStoreCredit?: boolean;
+  auditActor?: AuditActor;
 };
 
 type CreateExchangeSaleInput = {
@@ -78,7 +81,25 @@ const emitSaleCompletedEvent = (payload: {
 type SaleTenderInput = {
   method?: SaleTenderMethod;
   amountPence?: number;
+  voucherProviderId?: string | null;
 };
+
+const toVoucherProviderTenderSnapshot = (
+  provider: {
+    id: string;
+    name: string;
+    commissionBps: number;
+    isActive: boolean;
+  } | null,
+) =>
+  provider
+    ? {
+        id: provider.id,
+        name: provider.name,
+        commissionBps: provider.commissionBps,
+        isActive: provider.isActive,
+      }
+    : null;
 
 const toDateOrThrow = (value: string, label: "from" | "to"): Date => {
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
@@ -389,6 +410,16 @@ const toSaleResponse = async (saleId: string) => {
       },
       tenders: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        include: {
+          voucherProvider: {
+            select: {
+              id: true,
+              name: true,
+              commissionBps: true,
+              isActive: true,
+            },
+          },
+        },
       },
     },
   });
@@ -468,12 +499,16 @@ const toSaleResponse = async (saleId: string) => {
       saleId: tender.saleId,
       method: tender.method,
       amountPence: tender.amountPence,
+      voucherProviderId: tender.voucherProviderId,
+      voucherCommissionBps: tender.voucherCommissionBps,
+      voucherProvider: toVoucherProviderTenderSnapshot(tender.voucherProvider),
       createdAt: tender.createdAt,
       createdByStaffId: tender.createdByStaffId,
     })),
     tenderSummary: (() => {
       const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
-      const changeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+      const calculatedChangeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+      const changeDuePence = sale.completedAt ? sale.changeDuePence : calculatedChangeDuePence;
       return {
         totalPence: sale.totalPence,
         tenderedPence,
@@ -628,6 +663,16 @@ const getSaleTenderSummaryTx = async (tx: Prisma.TransactionClient, saleId: stri
           id: true,
           method: true,
           amountPence: true,
+          voucherProviderId: true,
+          voucherCommissionBps: true,
+          voucherProvider: {
+            select: {
+              id: true,
+              name: true,
+              commissionBps: true,
+              isActive: true,
+            },
+          },
           createdAt: true,
           createdByStaffId: true,
         },
@@ -640,7 +685,8 @@ const getSaleTenderSummaryTx = async (tx: Prisma.TransactionClient, saleId: stri
   }
 
   const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
-  const changeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+  const calculatedChangeDuePence = Math.max(0, tenderedPence - sale.totalPence);
+  const changeDuePence = sale.completedAt ? sale.changeDuePence : calculatedChangeDuePence;
   const cashTenderedPence = sale.tenders
     .filter((tender) => tender.method === "CASH")
     .reduce((sum, tender) => sum + tender.amountPence, 0);
@@ -657,6 +703,9 @@ const getSaleTenderSummaryTx = async (tx: Prisma.TransactionClient, saleId: stri
       id: tender.id,
       method: tender.method,
       amountPence: tender.amountPence,
+      voucherProviderId: tender.voucherProviderId,
+      voucherCommissionBps: tender.voucherCommissionBps,
+      voucherProvider: toVoucherProviderTenderSnapshot(tender.voucherProvider),
       createdAt: tender.createdAt,
       createdByStaffId: tender.createdByStaffId,
     })),
@@ -732,6 +781,7 @@ const assertTenderRulesForCompletion = (input: {
   tenderedPence: number;
   cashTenderedPence: number;
   requireTenders: boolean;
+  allowOverpaymentToStoreCredit: boolean;
 }) => {
   if (input.requireTenders && input.tenderedPence <= 0) {
     throw new HttpError(
@@ -750,10 +800,14 @@ const assertTenderRulesForCompletion = (input: {
   }
 
   const overTenderPence = Math.max(0, input.tenderedPence - input.totalPence);
-  if (overTenderPence > 0 && input.cashTenderedPence < overTenderPence) {
+  if (
+    overTenderPence > 0
+    && input.cashTenderedPence < overTenderPence
+    && !input.allowOverpaymentToStoreCredit
+  ) {
     throw new HttpError(
       409,
-      "Only cash tenders can exceed sale total",
+      "Only cash tenders can exceed sale total unless the overpayment is added to store credit",
       "SALE_TENDER_OVERPAY_INVALID",
     );
   }
@@ -767,6 +821,7 @@ export const completeSaleIfEligibleTx = async (
   const requireCapturedIntent = input.requireCapturedIntent ?? false;
   const requireTenders = input.requireTenders ?? true;
   const staffActorId = normalizeOptionalText(input.staffActorId);
+  const shouldCreditOverpayment = input.addOverpaymentToStoreCredit ?? false;
 
   await lockSaleForUpdateTx(tx, saleId);
 
@@ -806,10 +861,24 @@ export const completeSaleIfEligibleTx = async (
       saleId: sale.id,
       completedAt: sale.completedAt,
       changeDuePence: sale.changeDuePence,
+      creditedChangePence: 0,
       customerId: sale.customerId,
       workshopJobId: sale.workshopJobId,
       bikeId: sale.workshopJob?.bikeId ?? null,
     };
+  }
+
+  const layaway = await tx.layaway.findUnique({
+    where: { saleId: sale.id },
+    select: {
+      id: true,
+      status: true,
+      stockReleasedAt: true,
+      depositPaidPence: true,
+    },
+  });
+  if (layaway?.stockReleasedAt || layaway?.status === "CANCELLED" || layaway?.status === "EXPIRED") {
+    throw new HttpError(409, "Layaway stock has been released", "LAYAWAY_STOCK_RELEASED");
   }
 
   if (requireCapturedIntent) {
@@ -823,9 +892,38 @@ export const completeSaleIfEligibleTx = async (
     tenderedPence: tenderSummary.tenderedPence,
     cashTenderedPence: tenderSummary.cashTenderedPence,
     requireTenders,
+    allowOverpaymentToStoreCredit: shouldCreditOverpayment,
   });
 
-  const changeDuePence = Math.max(0, tenderSummary.tenderedPence - sale.totalPence);
+  const calculatedChangeDuePence = Math.max(0, tenderSummary.tenderedPence - sale.totalPence);
+  let changeDuePence = calculatedChangeDuePence;
+  let creditedChangePence = 0;
+
+  if (shouldCreditOverpayment && calculatedChangeDuePence > 0) {
+    const voucherTenderedPence = tenderSummary.tenders
+      .filter((tender) => tender.method === "VOUCHER")
+      .reduce((sum, tender) => sum + tender.amountPence, 0);
+    const creditSourceLabel =
+      tenderSummary.cashTenderedPence >= calculatedChangeDuePence
+        ? "Cash"
+        : voucherTenderedPence >= calculatedChangeDuePence
+          ? "Voucher"
+          : "Tender";
+    const credit = await issueSaleOverpaymentCreditTx(
+      tx,
+      {
+        saleId: sale.id,
+        customerId: sale.customerId,
+        amountPence: calculatedChangeDuePence,
+        paymentMethod: creditSourceLabel === "Cash" ? "CASH" : "OTHER",
+        sourceLabel: creditSourceLabel,
+      },
+      input.auditActor,
+    );
+    creditedChangePence = credit.amountPence;
+    changeDuePence = 0;
+  }
+
   const completedAt = new Date();
   const receiptNumber = sale.receiptNumber ?? toReceiptNumber(sale.id, completedAt);
 
@@ -844,6 +942,16 @@ export const completeSaleIfEligibleTx = async (
     },
   });
 
+  if (layaway && layaway.status !== "COMPLETED") {
+    await tx.layaway.update({
+      where: { id: layaway.id },
+      data: {
+        status: "COMPLETED",
+        completedAt,
+      },
+    });
+  }
+
   await recordCashSaleMovementForSaleTx(tx, {
     saleId: sale.id,
     cashTenderedPence: tenderSummary.cashTenderedPence,
@@ -855,6 +963,7 @@ export const completeSaleIfEligibleTx = async (
     saleId: updatedSale.id,
     completedAt,
     changeDuePence: updatedSale.changeDuePence,
+    creditedChangePence,
     totalPence: sale.totalPence,
     customerId: sale.customerId,
     workshopJobId: sale.workshopJobId,
@@ -881,6 +990,7 @@ export const completeSaleIfEligible = async (
     saleId: result.saleId,
     completedAt: result.completedAt,
     changeDuePence: result.changeDuePence,
+    creditedChangePence: result.creditedChangePence ?? 0,
   };
 };
 
@@ -932,6 +1042,17 @@ export const addSaleTender = async (
     throw new HttpError(400, "amountPence must be a positive integer", "INVALID_SALE_TENDER");
   }
   const amountPence = rawAmountPence;
+  const voucherProviderId = normalizeOptionalText(input.voucherProviderId);
+  if (voucherProviderId && method !== "VOUCHER") {
+    throw new HttpError(
+      400,
+      "voucherProviderId can only be used with voucher tenders",
+      "INVALID_SALE_TENDER",
+    );
+  }
+  if (voucherProviderId && !isUuid(voucherProviderId)) {
+    throw new HttpError(400, "Invalid voucher provider id", "INVALID_VOUCHER_PROVIDER_ID");
+  }
 
   const normalizedCreatedByStaffId = normalizeOptionalText(createdByStaffId);
 
@@ -953,11 +1074,31 @@ export const addSaleTender = async (
       throw new HttpError(409, "Cannot modify tenders for a completed sale", "SALE_COMPLETED");
     }
 
+    const voucherProvider = voucherProviderId
+      ? await tx.voucherProvider.findUnique({
+          where: { id: voucherProviderId },
+          select: {
+            id: true,
+            name: true,
+            commissionBps: true,
+            isActive: true,
+          },
+        })
+      : null;
+    if (voucherProviderId && !voucherProvider) {
+      throw new HttpError(404, "Voucher provider not found", "VOUCHER_PROVIDER_NOT_FOUND");
+    }
+    if (voucherProvider && !voucherProvider.isActive) {
+      throw new HttpError(409, "Voucher provider is inactive", "VOUCHER_PROVIDER_INACTIVE");
+    }
+
     const tender = await tx.saleTender.create({
       data: {
         saleId,
         method,
         amountPence,
+        voucherProviderId: voucherProvider?.id ?? null,
+        voucherCommissionBps: voucherProvider?.commissionBps ?? null,
         createdByStaffId: normalizedCreatedByStaffId ?? null,
       },
       select: {
@@ -965,6 +1106,16 @@ export const addSaleTender = async (
         saleId: true,
         method: true,
         amountPence: true,
+        voucherProviderId: true,
+        voucherCommissionBps: true,
+        voucherProvider: {
+          select: {
+            id: true,
+            name: true,
+            commissionBps: true,
+            isActive: true,
+          },
+        },
         createdAt: true,
         createdByStaffId: true,
       },

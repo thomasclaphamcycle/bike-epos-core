@@ -5,6 +5,7 @@ import {
   attachCustomerToBasketHandler,
   checkoutBasketHandler,
   createBasketHandler,
+  createLayawayFromBasketHandler,
   deleteBasketItemHandler,
   getBasketHandler,
   updateBasketItemHandler,
@@ -30,3 +31,4 @@ basketRouter.patch("/:id/lines/:itemId", requireRoleAtLeast("STAFF"), updateBask
 basketRouter.delete("/:id/lines/:itemId", requireRoleAtLeast("STAFF"), deleteBasketItemHandler);
 
 basketRouter.post("/:id/checkout", requireRoleAtLeast("STAFF"), checkoutBasketHandler);
+basketRouter.post("/:id/layaway", requireRoleAtLeast("STAFF"), createLayawayFromBasketHandler);

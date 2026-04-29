@@ -41,6 +41,11 @@ import {
   updateShippingProviderSettings,
 } from "../services/shipping/providerConfigService";
 import { removeStoreLogo, uploadStoreLogo } from "../services/storeLogoService";
+import {
+  createVoucherProvider,
+  listVoucherProviders,
+  updateVoucherProvider,
+} from "../services/voucherProviderService";
 import { HttpError } from "../utils/http";
 
 const assertOptionalString = (value: unknown, field: string) => {
@@ -78,6 +83,39 @@ const parseBooleanQuery = (value: unknown) => {
   }
 
   throw new HttpError(400, "boolean query values must be true/false", "INVALID_PRINTER");
+};
+
+const parseVoucherProviderBooleanQuery = (value: unknown, field: string) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${field} must be true or false`, "INVALID_VOUCHER_PROVIDER_QUERY");
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+
+  throw new HttpError(400, `${field} must be true or false`, "INVALID_VOUCHER_PROVIDER_QUERY");
+};
+
+const toVoucherProviderInput = (body: unknown) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "voucher provider body must be an object", "INVALID_VOUCHER_PROVIDER");
+  }
+
+  const record = body as Record<string, unknown>;
+  return {
+    name: record.name,
+    commissionBps: record.commissionBps,
+    isActive: record.isActive,
+    notes: record.notes,
+  };
 };
 
 const toRegisteredPrinterInput = (body: unknown) => {
@@ -504,6 +542,25 @@ export const listRegisteredPrintersHandler = async (req: Request, res: Response)
 
 export const listShippingProvidersHandler = async (_req: Request, res: Response) => {
   const payload = await listShippingProviderSettings();
+  res.json(payload);
+};
+
+export const listVoucherProvidersHandler = async (req: Request, res: Response) => {
+  const activeOnly = parseVoucherProviderBooleanQuery(req.query.activeOnly, "activeOnly");
+  const payload = await listVoucherProviders({ activeOnly });
+  res.json(payload);
+};
+
+export const createVoucherProviderHandler = async (req: Request, res: Response) => {
+  const payload = await createVoucherProvider(toVoucherProviderInput(req.body));
+  res.status(201).json(payload);
+};
+
+export const updateVoucherProviderHandler = async (req: Request, res: Response) => {
+  const payload = await updateVoucherProvider(
+    req.params.providerId,
+    toVoucherProviderInput(req.body),
+  );
   res.json(payload);
 };
 

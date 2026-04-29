@@ -120,24 +120,25 @@ model Variant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  product            Product                       @relation(fields: [productId], references: [id])
-  barcodes           Barcode[]
-  balances           StockBalance[]
-  movements          StockMovement[]
-  basketItems        BasketItem[]
-  saleItems          SaleItem[]
-  inventoryMovements InventoryMovement[]
-  stockLedgerEntries StockLedgerEntry[]
-  workshopParts      WorkshopJobPart[]
-  purchaseOrderItems PurchaseOrderItem[]
-  supplierLinks      SupplierProductLink[]
-  stocktakeLines     StocktakeLine[]
-  workshopLines      WorkshopJobLine[]
-  estimateLines      WorkshopEstimateLine[]
-  stockTransferLines StockTransferLine[]
-  hireAssets         HireAsset[]
-  templateLines      WorkshopServiceTemplateLine[]
-  webOrderItems      WebOrderItem[]
+  product             Product                       @relation(fields: [productId], references: [id])
+  barcodes            Barcode[]
+  balances            StockBalance[]
+  movements           StockMovement[]
+  basketItems         BasketItem[]
+  saleItems           SaleItem[]
+  layawayReservations LayawayReservation[]
+  inventoryMovements  InventoryMovement[]
+  stockLedgerEntries  StockLedgerEntry[]
+  workshopParts       WorkshopJobPart[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  supplierLinks       SupplierProductLink[]
+  stocktakeLines      StocktakeLine[]
+  workshopLines       WorkshopJobLine[]
+  estimateLines       WorkshopEstimateLine[]
+  stockTransferLines  StockTransferLine[]
+  hireAssets          HireAsset[]
+  templateLines       WorkshopServiceTemplateLine[]
+  webOrderItems       WebOrderItem[]
 }
 
 model SupplierProductLink {
@@ -551,6 +552,14 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum LayawayStatus {
+  ACTIVE
+  PART_PAID
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
 enum PaymentIntentStatus {
   REQUIRES_ACTION
   AUTHORIZED
@@ -624,6 +633,7 @@ model Sale {
   customerCaptureSessions SaleCustomerCaptureSession[]
   cashMovements           CashMovement[]               @relation("CashMovementSale")
   workshopCheckoutOutcome WorkshopCheckoutOutcome?
+  layaway                 Layaway?
 
   @@index([customerId])
   @@index([workshopJobId])
@@ -674,26 +684,89 @@ model SaleItem {
   unitPricePence Int
   lineTotalPence Int
 
-  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  variant     Variant          @relation(fields: [variantId], references: [id])
-  returnItems SaleReturnItem[]
-  refundLines RefundLine[]
+  sale               Sale                @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant            Variant             @relation(fields: [variantId], references: [id])
+  returnItems        SaleReturnItem[]
+  refundLines        RefundLine[]
+  layawayReservation LayawayReservation?
 }
 
 model SaleTender {
-  id               String           @id @default(uuid()) @db.Uuid
-  saleId           String           @db.Uuid
-  method           SaleTenderMethod
-  amountPence      Int
-  createdAt        DateTime         @default(now())
-  createdByStaffId String?
+  id                   String           @id @default(uuid()) @db.Uuid
+  saleId               String           @db.Uuid
+  method               SaleTenderMethod
+  amountPence          Int
+  voucherProviderId    String?          @db.Uuid
+  voucherCommissionBps Int?
+  createdAt            DateTime         @default(now())
+  createdByStaffId     String?
 
-  sale           Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  createdByStaff User? @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  sale                Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  voucherProvider     VoucherProvider?     @relation(fields: [voucherProviderId], references: [id], onDelete: SetNull)
+  createdByStaff      User?                @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
   cardTerminalSession CardTerminalSession?
 
   @@index([saleId, createdAt])
+  @@index([voucherProviderId])
   @@index([createdByStaffId])
+}
+
+model Layaway {
+  id               String        @id @default(uuid()) @db.Uuid
+  saleId           String        @unique @db.Uuid
+  basketId         String?       @db.Uuid
+  customerId       String?       @db.Uuid
+  status           LayawayStatus @default(ACTIVE)
+  totalPence       Int
+  depositPaidPence Int           @default(0)
+  expiresAt        DateTime
+  stockReleasedAt  DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  notes            String?
+  createdByStaffId String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  sale           Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  customer       Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdByStaff User?                @relation("LayawayCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  reservations   LayawayReservation[]
+
+  @@index([status, expiresAt])
+  @@index([customerId])
+  @@index([createdByStaffId])
+}
+
+model LayawayReservation {
+  id              String    @id @default(uuid()) @db.Uuid
+  layawayId       String    @db.Uuid
+  saleItemId      String    @unique @db.Uuid
+  variantId       String
+  quantity        Int
+  stockReleasedAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  layaway  Layaway  @relation(fields: [layawayId], references: [id], onDelete: Cascade)
+  saleItem SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Cascade)
+  variant  Variant  @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([layawayId])
+  @@index([variantId])
+}
+
+model VoucherProvider {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @unique
+  commissionBps Int      @default(0)
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  saleTenders SaleTender[]
+
+  @@index([isActive, name])
 }
 
 model ReceiptSettings {
@@ -965,7 +1038,7 @@ model PaymentIntent {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale                 Sale                  @relation(fields: [saleId], references: [id], onDelete: Cascade)
   cardTerminalSessions CardTerminalSession[]
 
   @@index([saleId, createdAt])
@@ -1384,6 +1457,7 @@ model Customer {
 
   baskets                 Basket[]
   sales                   Sale[]
+  layaways                Layaway[]
   customerCaptureSessions SaleCustomerCaptureSession[]
   account                 CustomerAccount?
   workshopJobs            WorkshopJob[]
@@ -2093,6 +2167,7 @@ model User {
   stockLedgerEntries       StockLedgerEntry[]     @relation("StockLedgerEntryCreatedByStaff")
   createdSales             Sale[]                 @relation("SaleCreatedByStaff")
   saleTenders              SaleTender[]           @relation("SaleTenderCreatedByStaff")
+  layawaysCreated          Layaway[]              @relation("LayawayCreatedByStaff")
   createdRefunds           Refund[]               @relation("RefundCreatedByStaff")
   refundTenders            RefundTender[]         @relation("RefundTenderCreatedByStaff")
   issuedReceipts           Receipt[]              @relation("ReceiptIssuedByStaff")

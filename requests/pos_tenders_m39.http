@@ -3,6 +3,25 @@
 @staffId = staff-1
 @saleId = REPLACE_SALE_ID
 @tenderId = REPLACE_TENDER_ID
+@voucherProviderId = REPLACE_VOUCHER_PROVIDER_ID
+
+### List voucher providers for POS dropdown (STAFF+)
+GET {{baseUrl}}/api/settings/voucher-providers?activeOnly=true
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+### Add voucher provider in settings (ADMIN)
+POST {{baseUrl}}/api/settings/voucher-providers
+Content-Type: application/json
+X-Staff-Role: ADMIN
+X-Staff-Id: admin-1
+
+{
+  "name": "Government Voucher Scheme",
+  "commissionBps": 250,
+  "isActive": true,
+  "notes": "2.50% commission"
+}
 
 ### List sale tenders (STAFF+)
 GET {{baseUrl}}/api/sales/{{saleId}}/tenders
@@ -31,6 +50,18 @@ X-Staff-Id: {{staffId}}
   "amountPence": 500
 }
 
+### Add over-value voucher tender (complete with overpayment credit below)
+POST {{baseUrl}}/api/sales/{{saleId}}/tenders
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "method": "VOUCHER",
+  "amountPence": 5000,
+  "voucherProviderId": "{{voucherProviderId}}"
+}
+
 ### Remove tender line (sale must be incomplete)
 DELETE {{baseUrl}}/api/sales/{{saleId}}/tenders/{{tenderId}}
 X-Staff-Role: {{staffRole}}
@@ -51,3 +82,15 @@ X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 
 {}
+
+### Complete sale and add cash/voucher overpayment to attached customer store credit
+POST {{baseUrl}}/api/sales/{{saleId}}/complete
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{
+  "overpaymentCredit": {
+    "addToStoreCredit": true
+  }
+}
