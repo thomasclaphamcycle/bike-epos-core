@@ -30,7 +30,7 @@ type EntityTimelineResponse = {
 type EntityTimelinePanelProps = {
   entityType: "WORKSHOP_JOB" | "CUSTOMER" | "BIKE";
   entityId?: string | null;
-  hint: string;
+  hint?: string;
   emptyState: string;
   loadingLabel?: string;
 };
@@ -90,7 +90,7 @@ export const EntityTimelinePanel = ({
   return (
     <div className="workshop-job-event-timeline">
       <div className="workshop-job-event-timeline__header">
-        <p className="workshop-job-status-panel__hint">{hint}</p>
+        {hint ? <p className="workshop-job-status-panel__hint">{hint}</p> : null}
         <button
           type="button"
           className="button-link"

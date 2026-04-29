@@ -559,6 +559,23 @@ enum PaymentIntentStatus {
   CANCELED
 }
 
+enum CardTerminalProvider {
+  DOJO
+}
+
+enum CardTerminalSessionStatus {
+  CREATED
+  INITIATED
+  SIGNATURE_VERIFICATION_REQUIRED
+  AUTHORIZED
+  CAPTURED
+  DECLINED
+  CANCELED
+  EXPIRED
+  FAILED
+  UNKNOWN
+}
+
 enum SaleCustomerCaptureSessionStatus {
   ACTIVE
   COMPLETED
@@ -601,6 +618,7 @@ model Sale {
   tenders                 SaleTender[]
   receipt                 Receipt?
   paymentIntents          PaymentIntent[]
+  cardTerminalSessions    CardTerminalSession[]
   returns                 SaleReturn[]
   refunds                 Refund[]
   customerCaptureSessions SaleCustomerCaptureSession[]
@@ -672,6 +690,7 @@ model SaleTender {
 
   sale           Sale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
   createdByStaff User? @relation("SaleTenderCreatedByStaff", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  cardTerminalSession CardTerminalSession?
 
   @@index([saleId, createdAt])
   @@index([createdByStaffId])
@@ -947,9 +966,45 @@ model PaymentIntent {
   updatedAt   DateTime            @updatedAt
 
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  cardTerminalSessions CardTerminalSession[]
 
   @@index([saleId, createdAt])
   @@index([provider, status, createdAt])
+}
+
+model CardTerminalSession {
+  id                        String                    @id @default(uuid()) @db.Uuid
+  provider                  CardTerminalProvider      @default(DOJO)
+  status                    CardTerminalSessionStatus @default(CREATED)
+  sessionType               String                    @default("Sale")
+  saleId                    String                    @db.Uuid
+  corePaymentIntentId       String?                   @db.Uuid
+  saleTenderId              String?                   @unique @db.Uuid
+  providerPaymentIntentId   String?
+  providerTerminalSessionId String?                   @unique
+  terminalId                String
+  amountPence               Int
+  currencyCode              String                    @default("GBP")
+  providerStatus            String?
+  providerReference         String?
+  notificationEvents        Json?
+  customerReceipt           Json?
+  merchantReceipt           Json?
+  lastErrorCode             String?
+  lastErrorMessage          String?
+  createdByStaffId          String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  completedAt               DateTime?
+
+  sale              Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  corePaymentIntent PaymentIntent? @relation(fields: [corePaymentIntentId], references: [id], onDelete: SetNull)
+  saleTender        SaleTender?    @relation(fields: [saleTenderId], references: [id], onDelete: SetNull)
+
+  @@index([saleId, createdAt])
+  @@index([provider, status, createdAt])
+  @@index([terminalId, status])
+  @@index([corePaymentIntentId])
 }
 
 enum RefundStatus {
@@ -1316,6 +1371,10 @@ model Customer {
   lastName        String
   email           String?  @unique
   phone           String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  postcode        String?
   emailAllowed    Boolean  @default(true)
   smsAllowed      Boolean  @default(true)
   whatsappAllowed Boolean  @default(true)
@@ -1339,6 +1398,7 @@ model Customer {
   @@index([firstName])
   @@index([lastName])
   @@index([phone])
+  @@index([postcode])
 }
 
 enum CustomerAccountStatus {

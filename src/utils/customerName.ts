@@ -101,6 +101,10 @@ export const buildCustomerSearchWhere = (query: string): Prisma.CustomerWhereInp
       ...compoundNameClauses,
       { email: { contains: normalized, mode: "insensitive" } },
       { phone: { contains: normalized, mode: "insensitive" } },
+      { postcode: { contains: normalized, mode: "insensitive" } },
+      { addressLine1: { contains: normalized, mode: "insensitive" } },
+      { addressLine2: { contains: normalized, mode: "insensitive" } },
+      { city: { contains: normalized, mode: "insensitive" } },
     ],
   };
 };

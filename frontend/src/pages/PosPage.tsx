@@ -397,6 +397,11 @@ export const PosPage = () => {
     && !selectedCustomerAttachedToSale
     && basket?.customer?.id === selectedCustomer.id,
   );
+  const checkoutMode = Boolean(sale);
+  const compactCustomerRail = checkoutMode && Boolean(selectedCustomer);
+  const showCustomerTools = !compactCustomerRail;
+  const showBasketPanel = !checkoutMode || basketItemCount > 0;
+  const showBasketLineControls = !checkoutMode;
   const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
   const posOpenState = useMemo(() => getPosOpenState(location.state), [location.state]);
@@ -1241,15 +1246,32 @@ export const PosPage = () => {
     void createCustomerCaptureSession();
   };
 
-  const chooseNewCustomer = () => {
+  const openCustomerCreatePanel = () => {
+    const searchedName = customerSearchText.trim();
     setShowCreateCustomer(true);
     setCustomerOptionsOpen(false);
+    if (searchedName) {
+      setNewCustomerName(searchedName);
+    }
     window.requestAnimationFrame(() => {
       newCustomerNameInputRef.current?.focus();
     });
   };
 
-  const createCustomerAndSelect = async () => {
+  const chooseNewCustomer = () => {
+    openCustomerCreatePanel();
+  };
+
+  const startQuickCustomerCreate = () => {
+    if (showCreateCustomer) {
+      setShowCreateCustomer(false);
+      return;
+    }
+
+    openCustomerCreatePanel();
+  };
+
+  const createCustomerAndSelect = async (options?: { openProfile?: boolean }) => {
     if (!newCustomerName.trim()) {
       error("Customer name is required.");
       return;
@@ -1269,6 +1291,9 @@ export const PosPage = () => {
       setNewCustomerEmail("");
       setNewCustomerPhone("");
       await selectCustomer(created);
+      if (options?.openProfile) {
+        setCustomerProfileModalOpen(true);
+      }
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Failed to create customer";
       error(message);
@@ -2254,8 +2279,8 @@ export const PosPage = () => {
 
           </div>
 
-          <div className="pos-side-column">
-            <section className="pos-panel pos-customer-panel">
+          <div className={`pos-side-column${checkoutMode ? " pos-side-column--checkout" : ""}`}>
+            <section className={`pos-panel pos-customer-panel${compactCustomerRail ? " pos-customer-panel--checkout" : ""}`}>
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Customer</div>
@@ -2266,7 +2291,9 @@ export const PosPage = () => {
                     data-testid="pos-customer-clear"
                     onClick={() => void clearSelectedCustomer()}
                   >
-                    {selectedCustomerAttachedToSale || selectedCustomerAttachedToBasket
+                    {compactCustomerRail
+                      ? "Remove"
+                      : selectedCustomerAttachedToSale || selectedCustomerAttachedToBasket
                       ? "Remove customer"
                       : "Clear selection"}
                   </button>
@@ -2275,7 +2302,7 @@ export const PosPage = () => {
 
               {selectedCustomer ? (
                 <div
-                  className="selected-customer-panel selected-customer-panel--interactive"
+                  className={`selected-customer-panel selected-customer-panel--interactive${compactCustomerRail ? " selected-customer-panel--checkout" : ""}`}
                   data-testid="pos-selected-customer"
                   role="button"
                   tabIndex={0}
@@ -2293,7 +2320,9 @@ export const PosPage = () => {
                     <div className="muted-text">
                       {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
                     </div>
-                    <div className="selected-customer-panel__hint">Tap for full profile</div>
+                    {!compactCustomerRail ? (
+                      <div className="selected-customer-panel__hint">Tap for full profile</div>
+                    ) : null}
                   </div>
                   <div className="selected-customer-panel__meta">
                     <div className="customer-status-chip">
@@ -2303,234 +2332,257 @@ export const PosPage = () => {
                           ? "Attached to basket"
                           : "Selected for checkout"}
                     </div>
-                    <span className="selected-customer-panel__action">View details</span>
                   </div>
                 </div>
               ) : null}
 
-              <PosCustomerCapturePanel
-                target={customerCaptureTarget}
-                isCaptureEligible={isCaptureEligible}
-                actionsDisabled={loading || completing}
-                captureSession={captureSession}
-                captureSessionLoading={captureSessionLoading}
-                captureSessionLaunchMode={captureSessionLaunchMode}
-                creatingCaptureSession={creatingCaptureSession}
-                captureStatusError={captureStatusError}
-                captureUrl={captureUrl}
-                captureCompletionSummary={captureCompletionSummary}
-                onDismissCompletion={dismissCaptureCompletionSummary}
-                onCreateCustomerCaptureSession={() => void createCustomerCaptureSession()}
-                onCopyCaptureUrl={() => void copyCaptureUrl()}
-                onRefreshStatus={() => void refreshCaptureStatus()}
-                onRefreshTarget={() => {
-                  if (!customerCaptureTarget) {
-                    return;
-                  }
-                  void refreshTargetAfterCustomerCapture(customerCaptureTarget, { showToast: true });
-                }}
-              />
-
-              <div className="customer-search-panel">
-                <div className="customer-search-stack grow">
-                  <div className="grow">
-                    <input
-                      ref={customerSearchInputRef}
-                      data-testid="pos-customer-search"
-                      value={customerSearchText}
-                      onChange={(event) => setCustomerSearchText(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (customerResults.length === 0) {
-                          return;
-                        }
-
-                        if (event.key === "ArrowDown") {
-                          event.preventDefault();
-                          setHighlightedCustomerIndex((current) => (
-                            current < 0 ? 0 : Math.min(current + 1, customerResults.length - 1)
-                          ));
-                          return;
-                        }
-
-                        if (event.key === "ArrowUp") {
-                          event.preventDefault();
-                          setHighlightedCustomerIndex((current) => (
-                            current < 0 ? 0 : Math.max(current - 1, 0)
-                          ));
-                          return;
-                        }
-
-                        if (event.key === "Enter" && highlightedCustomerIndex >= 0) {
-                          event.preventDefault();
-                          void selectCustomer(customerResults[highlightedCustomerIndex]);
-                        }
-                      }}
-                      placeholder="name, phone, email"
-                    />
-                  </div>
-
-                  {customerLoading ? <p className="muted-text pos-customer-search-status">Searching customers...</p> : null}
-
-                  {customerSearchText.trim() ? (
-                    <div className="pos-customer-results" role="listbox" aria-label="Customer search results">
-                      {customerResults.length === 0 ? (
-                        <p className="pos-customer-results-empty">No customers matched that search. Use quick create if you need a new account.</p>
-                      ) : (
-                        customerResults.map((customer, index) => {
-                          const metadata = [customer.email, customer.phone].filter(Boolean).join(" • ") || "No email or phone";
-
-                          return (
-                            <button
-                              key={customer.id}
-                              type="button"
-                              ref={(element) => {
-                                customerResultRefs.current[index] = element;
-                              }}
-                              className={index === highlightedCustomerIndex ? "pos-customer-result pos-customer-result-active" : "pos-customer-result"}
-                              data-testid={`pos-customer-select-${customer.id}`}
-                              aria-selected={index === highlightedCustomerIndex}
-                              onClick={() => void selectCustomer(customer)}
-                              onMouseEnter={() => setHighlightedCustomerIndex(index)}
-                            >
-                              <span className="pos-customer-result-copy">
-                                <span className="pos-customer-result-name">{customer.name}</span>
-                                <span className="pos-customer-result-meta">{metadata}</span>
-                              </span>
-                              <span className="pos-customer-result-action">{sale ? "Attach" : "Select"}</span>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-
-                <button
-                  type="button"
-                  aria-expanded={showCreateCustomer}
-                  onClick={() => setShowCreateCustomer((value) => !value)}
-                >
-                  {showCreateCustomer ? "Hide quick create" : "Quick create"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void clearBasket()}
-                  disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-                >
-                  Clear basket
-                </button>
+              <div className={compactCustomerRail ? "pos-customer-capture-compact-shell" : undefined}>
+                  <PosCustomerCapturePanel
+                    target={customerCaptureTarget}
+                    isCaptureEligible={isCaptureEligible}
+                    actionsDisabled={loading || completing}
+                    captureSession={captureSession}
+                    captureSessionLoading={captureSessionLoading}
+                    captureSessionLaunchMode={captureSessionLaunchMode}
+                    creatingCaptureSession={creatingCaptureSession}
+                    captureStatusError={captureStatusError}
+                    captureUrl={captureUrl}
+                    captureCompletionSummary={captureCompletionSummary}
+                    onDismissCompletion={dismissCaptureCompletionSummary}
+                    onCreateCustomerCaptureSession={() => void createCustomerCaptureSession()}
+                    onCopyCaptureUrl={() => void copyCaptureUrl()}
+                    onRefreshStatus={() => void refreshCaptureStatus()}
+                    onRefreshTarget={() => {
+                      if (!customerCaptureTarget) {
+                        return;
+                      }
+                      void refreshTargetAfterCustomerCapture(customerCaptureTarget, { showToast: true });
+                    }}
+                  />
               </div>
 
-              {showCreateCustomer ? (
-                <div className="quick-create-panel">
-                  <div className="quick-create-grid">
-                    <label>
-                      Name
-                      <input
-                        ref={newCustomerNameInputRef}
-                        value={newCustomerName}
-                        onChange={(event) => setNewCustomerName(event.target.value)}
-                        placeholder="Customer name"
-                      />
-                    </label>
-                    <label>
-                      Email
-                      <input
-                        value={newCustomerEmail}
-                        onChange={(event) => setNewCustomerEmail(event.target.value)}
-                        placeholder="name@example.com"
-                      />
-                    </label>
-                    <label>
-                      Phone
-                      <input
-                        value={newCustomerPhone}
-                        onChange={(event) => setNewCustomerPhone(event.target.value)}
-                        placeholder="Phone number"
-                      />
-                    </label>
-                  </div>
-                  <div className="actions-inline">
-                    <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
-                      {creatingCustomer ? "Creating..." : "Create and Select"}
+              {showCustomerTools ? (
+                <>
+                  <div className="customer-search-panel">
+                    <div className="customer-search-stack grow">
+                      <div className="grow">
+                        <input
+                          ref={customerSearchInputRef}
+                          data-testid="pos-customer-search"
+                          value={customerSearchText}
+                          onChange={(event) => setCustomerSearchText(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              if (highlightedCustomerIndex >= 0 && customerResults[highlightedCustomerIndex]) {
+                                void selectCustomer(customerResults[highlightedCustomerIndex]);
+                                return;
+                              }
+                              if (customerSearchText.trim()) {
+                                openCustomerCreatePanel();
+                              }
+                              return;
+                            }
+
+                            if (customerResults.length === 0) {
+                              return;
+                            }
+
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              setHighlightedCustomerIndex((current) => (
+                                current < 0 ? 0 : Math.min(current + 1, customerResults.length - 1)
+                              ));
+                              return;
+                            }
+
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              setHighlightedCustomerIndex((current) => (
+                                current < 0 ? 0 : Math.max(current - 1, 0)
+                              ));
+                            }
+                          }}
+                          placeholder="name, phone, email"
+                        />
+                      </div>
+
+                      {customerLoading ? <p className="muted-text pos-customer-search-status">Searching customers...</p> : null}
+
+                      {customerSearchText.trim() && !showCreateCustomer ? (
+                        <div className="pos-customer-results" role="listbox" aria-label="Customer search results">
+                          {customerResults.length === 0 ? (
+                            <p className="pos-customer-results-empty">No match. Enter to create.</p>
+                          ) : (
+                            customerResults.map((customer, index) => {
+                              const metadata = [customer.email, customer.phone].filter(Boolean).join(" • ") || "No email or phone";
+
+                              return (
+                                <button
+                                  key={customer.id}
+                                  type="button"
+                                  ref={(element) => {
+                                    customerResultRefs.current[index] = element;
+                                  }}
+                                  className={index === highlightedCustomerIndex ? "pos-customer-result pos-customer-result-active" : "pos-customer-result"}
+                                  data-testid={`pos-customer-select-${customer.id}`}
+                                  aria-selected={index === highlightedCustomerIndex}
+                                  onClick={() => void selectCustomer(customer)}
+                                  onMouseEnter={() => setHighlightedCustomerIndex(index)}
+                                >
+                                  <span className="pos-customer-result-copy">
+                                    <span className="pos-customer-result-name">{customer.name}</span>
+                                    <span className="pos-customer-result-meta">{metadata}</span>
+                                  </span>
+                                  <span className="pos-customer-result-action">{sale ? "Attach" : "Select"}</span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-expanded={showCreateCustomer}
+                      onClick={startQuickCustomerCreate}
+                    >
+                      {showCreateCustomer ? "Hide quick create" : "Quick create"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void clearBasket()}
+                      disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                    >
+                      Clear basket
                     </button>
                   </div>
-                </div>
+
+                  {showCreateCustomer ? (
+                    <div className="quick-create-panel pos-customer-create-panel">
+                      <div className="quick-create-grid">
+                        <label>
+                          Name
+                          <input
+                            ref={newCustomerNameInputRef}
+                            value={newCustomerName}
+                            onChange={(event) => setNewCustomerName(event.target.value)}
+                            placeholder="Customer name"
+                          />
+                        </label>
+                        <label>
+                          Email
+                          <input
+                            value={newCustomerEmail}
+                            onChange={(event) => setNewCustomerEmail(event.target.value)}
+                            placeholder="name@example.com"
+                          />
+                        </label>
+                        <label>
+                          Phone
+                          <input
+                            value={newCustomerPhone}
+                            onChange={(event) => setNewCustomerPhone(event.target.value)}
+                            placeholder="Phone number"
+                          />
+                        </label>
+                      </div>
+                      <div className="actions-inline">
+                        <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
+                          {creatingCustomer ? "Creating..." : "Create and Select"}
+                        </button>
+                        <button
+                          type="button"
+                          className="pos-add-more-details-link"
+                          onClick={() => void createCustomerAndSelect({ openProfile: true })}
+                          disabled={creatingCustomer}
+                        >
+                          Add more details
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
             </section>
 
-            <section className="pos-panel pos-basket-panel">
-              <div className="pos-panel-heading">
-                <div>
-                  <div className="pos-section-kicker">Basket</div>
+            {showBasketPanel ? (
+              <section className="pos-panel pos-basket-panel">
+                <div className="pos-panel-heading">
+                  <div>
+                    <div className="pos-section-kicker">Basket</div>
+                  </div>
                 </div>
-              </div>
 
-              {basket && basket.items.length > 0 ? (
-                <div className="pos-basket-groups">
-                  {basketGroups.map((group) => (
-                    <section key={group.key} className={`pos-basket-group pos-basket-group-${group.key.toLowerCase()}`}>
-                      <div className="pos-basket-group-header pos-group-row">
-                        <div>
-                          <strong>{saleContext.type === "WORKSHOP" ? group.label : group.key === "PART" ? "" : group.label}</strong>
+                {basket && basket.items.length > 0 ? (
+                  <div className="pos-basket-groups">
+                    {basketGroups.map((group) => (
+                      <section key={group.key} className={`pos-basket-group pos-basket-group-${group.key.toLowerCase()}`}>
+                        <div className="pos-basket-group-header pos-group-row">
+                          <div>
+                            <strong>{saleContext.type === "WORKSHOP" ? group.label : group.key === "PART" ? "" : group.label}</strong>
+                          </div>
                         </div>
-                      </div>
-                      <div className="pos-basket-list">
-                        {group.items.map((item) => (
-                          <article
-                            key={item.id}
-                            ref={(element) => {
-                              basketItemRefs.current[item.id] = element;
-                            }}
-                            className={`pos-line-item${lastAddedBasketItemId === item.id ? " pos-line-item-highlighted" : ""}`}
-                          >
-                            <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
-                              <div className="table-primary pos-line-title">
-                                {item.productName}
-                                {item.variantName ? ` (${item.variantName})` : ""}
+                        <div className="pos-basket-list">
+                          {group.items.map((item) => (
+                            <article
+                              key={item.id}
+                              ref={(element) => {
+                                basketItemRefs.current[item.id] = element;
+                              }}
+                              className={`pos-line-item${lastAddedBasketItemId === item.id ? " pos-line-item-highlighted" : ""}${!showBasketLineControls ? " pos-line-item-readonly" : ""}`}
+                            >
+                              <div className="pos-line-main" title={`SKU ${item.sku}`} data-sku={item.sku}>
+                                <div className="table-primary pos-line-title">
+                                  {item.productName}
+                                  {item.variantName ? ` (${item.variantName})` : ""}
+                                </div>
                               </div>
-                            </div>
-                            <div className="pos-line-pricing">
-                              <strong>{formatMoney(item.lineTotalPence)}</strong>
-                              <span>{formatMoney(item.unitPricePence)} each</span>
-                            </div>
-                            <div className="pos-line-actions">
-                              <div className="actions-inline pos-qty-controls">
-                                <button
-                                  type="button"
-                                  onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
-                                  disabled={Boolean(saleId)}
-                                  aria-label={`Decrease quantity for ${item.productName}`}
-                                >
-                                  -
-                                </button>
-                                <strong>{item.quantity}</strong>
-                                <button
-                                  type="button"
-                                  onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
-                                  disabled={Boolean(saleId)}
-                                  aria-label={`Increase quantity for ${item.productName}`}
-                                >
-                                  +
-                                </button>
+                              <div className="pos-line-pricing">
+                                <strong>{formatMoney(item.lineTotalPence)}</strong>
+                                <span>{formatMoney(item.unitPricePence)} each</span>
                               </div>
-                              <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
-                                Remove
-                              </button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              ) : (
-                <div className="pos-empty-state">
-                  <strong>Scan or search to start</strong>
-                </div>
-              )}
-            </section>
+                              {showBasketLineControls ? (
+                                <div className="pos-line-actions">
+                                  <div className="actions-inline pos-qty-controls">
+                                    <button
+                                      type="button"
+                                      onClick={() => void adjustLineQty(item.id, item.quantity, -1)}
+                                      disabled={Boolean(saleId)}
+                                      aria-label={`Decrease quantity for ${item.productName}`}
+                                    >
+                                      -
+                                    </button>
+                                    <strong>{item.quantity}</strong>
+                                    <button
+                                      type="button"
+                                      onClick={() => void adjustLineQty(item.id, item.quantity, 1)}
+                                      disabled={Boolean(saleId)}
+                                      aria-label={`Increase quantity for ${item.productName}`}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                  <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
+                                    Remove
+                                  </button>
+                                </div>
+                              ) : null}
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="pos-empty-state">
+                    <strong>Scan or search to start</strong>
+                  </div>
+                )}
+              </section>
+            ) : null}
 
             <section className="pos-panel pos-payment-panel">
               <div className="pos-panel-heading">
@@ -2642,12 +2694,6 @@ export const PosPage = () => {
 
               {sale ? (
                 <>
-                  <div className="muted-text pos-payment-running-total">
-                    <span>Tendered {formatMoney(sale.tenderSummary.tenderedPence)}</span>
-                    <span>Remaining {formatMoney(sale.tenderSummary.remainingPence)}</span>
-                    <span>Change {formatMoney(sale.tenderSummary.changeDuePence)}</span>
-                  </div>
-
                   <div className="actions-inline pos-tender-switch" role="group" aria-label="Tender type">
                     {enabledTenderMethods.map((method) => (
                       <button

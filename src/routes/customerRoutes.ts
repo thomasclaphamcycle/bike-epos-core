@@ -17,6 +17,7 @@ import {
   updateCustomerBikeHandler,
   updateBikeServiceScheduleHandler,
   updateCustomerCommunicationPreferencesHandler,
+  updateCustomerHandler,
 } from "../controllers/customerController";
 import { requireRoleAtLeast } from "../middleware/staffRole";
 
@@ -50,4 +51,5 @@ customerRouter.patch(
 customerRouter.get("/:id/sales", requireRoleAtLeast("STAFF"), listCustomerSalesHandler);
 customerRouter.get("/:id/workshop-jobs", requireRoleAtLeast("STAFF"), listCustomerWorkshopJobsHandler);
 customerRouter.get("/:id/timeline", requireRoleAtLeast("STAFF"), getCustomerTimelineHandler);
+customerRouter.patch("/:id", requireRoleAtLeast("STAFF"), updateCustomerHandler);
 customerRouter.get("/:id", requireRoleAtLeast("STAFF"), getCustomerHandler);
