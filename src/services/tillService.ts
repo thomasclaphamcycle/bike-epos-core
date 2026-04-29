@@ -542,16 +542,28 @@ export const recordCashSaleMovementForSaleTx = async (
     return;
   }
 
-  // Legacy flows that create Payment(method=CASH) already record movement by payment id.
-  const existingCashPayment = await tx.payment.findFirst({
+  // Cash already captured through Payment rows is recorded at payment time.
+  // Completion should only record any remaining cash tendered directly on the sale.
+  const existingCashPayments = await tx.payment.aggregate({
     where: {
       saleId: input.saleId,
       method: "CASH",
+      purpose: { in: ["FINAL", "DEPOSIT"] },
       amountPence: { gt: 0 },
+      status: { not: "REFUNDED" },
     },
-    select: { id: true },
+    _sum: {
+      amountPence: true,
+      refundedTotalPence: true,
+    },
   });
-  if (existingCashPayment) {
+  const alreadyRecordedCashPence = Math.max(
+    0,
+    (existingCashPayments._sum.amountPence ?? 0)
+      - (existingCashPayments._sum.refundedTotalPence ?? 0),
+  );
+  const unrecordedCashPence = Math.max(0, netCashPence - alreadyRecordedCashPence);
+  if (unrecordedCashPence <= 0) {
     return;
   }
 
@@ -564,7 +576,7 @@ export const recordCashSaleMovementForSaleTx = async (
     await createMovementTx(tx, {
       sessionId: openSession.id,
       type: "CASH_SALE",
-      amountPence: netCashPence,
+      amountPence: unrecordedCashPence,
       ref: `SALE_TENDER:${input.saleId}`,
       relatedSaleId: input.saleId,
       ...(input.createdByStaffId ? { createdByStaffId: input.createdByStaffId } : {}),

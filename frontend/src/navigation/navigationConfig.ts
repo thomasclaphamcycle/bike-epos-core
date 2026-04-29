@@ -89,6 +89,13 @@ export const navigationSections: NavigationSection[] = [
       },
       {
         kind: "link",
+        label: "Layaways",
+        to: "/pos/layaways",
+        minimumRole: "STAFF",
+        matchPrefixes: ["/pos/layaways"],
+      },
+      {
+        kind: "link",
         label: "Cash Management",
         to: "/management/cash",
         minimumRole: "MANAGER",
@@ -484,6 +491,12 @@ export const navigationSections: NavigationSection[] = [
         kind: "link",
         label: "Shipping",
         to: "/settings/shipping",
+        minimumRole: "ADMIN",
+      },
+      {
+        kind: "link",
+        label: "Vouchers",
+        to: "/settings/vouchers",
         minimumRole: "ADMIN",
       },
       {

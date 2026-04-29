@@ -378,10 +378,24 @@ Dojo Pay at Counter card terminal setup is documented in [`docs/dojo_payments.md
   - `POST /api/sales/:saleId/tenders`
   - `GET /api/sales/:saleId/tenders`
   - `DELETE /api/sales/:saleId/tenders/:tenderId`
+  - `GET/POST/PATCH /api/settings/voucher-providers` for voucher company names and commission rates used by POS voucher tenders
 - Sale completion (`POST /api/sales/:saleId/complete`) now validates tender coverage:
   - tendered total must cover sale total
-  - over-tender is allowed only when cash tender covers the overage
-- Till integration records only net cash taken for split/overpaid tender flows.
+  - over-tender is allowed only when cash tender covers the overage or the overage is added to store credit
+  - cash or voucher overpayment can be added to the attached customer's store credit by sending `overpaymentCredit.addToStoreCredit`
+- Voucher tenders can store `voucherProviderId`; the tender snapshots the provider commission rate for later financial reporting.
+- Till integration records only net cash taken for split/overpaid tender flows; when cash overpayment is converted to store credit, the credited amount remains cash taken and is also recorded as a customer credit liability.
+
+## POS Layaways
+
+Staff can save a POS basket as a layaway to hold stock without completing the sale immediately.
+
+- `POST /api/baskets/:basketId/layaway` converts the basket to a draft sale, reserves the stock, and can record an optional deposit.
+- `GET /api/layaways` lists open layaways; `includeClosed=true` includes completed, cancelled, and expired records.
+- `POST /api/layaways/:layawayId/complete` completes a fully tendered layaway sale.
+- `POST /api/layaways/:layawayId/cancel` releases unpaid layaway stock for manager users.
+- Unpaid expired layaways release stock automatically when layaways are read.
+- Part-paid overdue layaways stay held and are flagged for staff review rather than being auto-released.
 
 ## Receipts v1 (M40)
 

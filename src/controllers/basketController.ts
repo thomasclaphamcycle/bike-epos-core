@@ -11,6 +11,7 @@ import {
 } from "../services/basketService";
 import { HttpError } from "../utils/http";
 import { checkoutBasketToSale } from "../services/salesService";
+import { createLayawayFromBasketHandler } from "./layawayController";
 import { parsePaymentFromBody } from "./salesController";
 import { getRequestStaffActorId } from "../middleware/staffRole";
 import { resolveRequestLocation } from "../services/locationService";
@@ -165,3 +166,5 @@ export const checkoutBasketHandler = async (req: Request, res: Response) => {
     payment: result.payment,
   });
 };
+
+export { createLayawayFromBasketHandler };

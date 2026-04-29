@@ -179,6 +179,8 @@ type SaleResponse = {
     id: string;
     method: string;
     amountPence: number;
+    voucherProviderId?: string | null;
+    voucherCommissionBps?: number | null;
   }>;
 };
 
@@ -192,13 +194,17 @@ type CompleteSaleResult = {
   saleId: string;
   completedAt: string;
   changeDuePence: number;
+  creditedChangePence?: number;
   receiptUrl?: string;
 };
 
 type ConfiguredTenderMethod = AppConfig["pos"]["enabledTenderMethods"][number];
 type TenderMethod = ConfiguredTenderMethod | "GIFT_CARD";
 type SaleTenderMethod = Exclude<ConfiguredTenderMethod, "STORE_CREDIT">;
+type ManualConfirmationTenderMethod = Extract<TenderMethod, "BANK_TRANSFER" | "VOUCHER" | "GIFT_CARD">;
 type CardPaymentMode = "TERMINAL" | "MANUAL";
+type CashOverpaymentDisposition = "CHANGE" | "STORE_CREDIT";
+type LayawayDepositMethod = "CASH" | "CARD" | "OTHER";
 type MockCardTerminalStatus = "PENDING" | "APPROVED" | "DECLINED";
 type CardTerminalTrafficState = "idle" | "pending" | "approved" | "declined";
 
@@ -236,7 +242,34 @@ type SaleTenderSummaryResponse = {
     id: string;
     method: string;
     amountPence: number;
+    voucherProviderId?: string | null;
+    voucherCommissionBps?: number | null;
   }>;
+};
+
+type VoucherProvider = {
+  id: string;
+  name: string;
+  commissionBps: number;
+  isActive: boolean;
+  notes: string | null;
+};
+
+type VoucherProviderListResponse = {
+  providers: VoucherProvider[];
+};
+
+type LayawayResponse = {
+  layaway: {
+    id: string;
+    saleId: string;
+    status: string;
+    totalPence: number;
+    depositPaidPence: number;
+    remainingPence: number;
+    expiresAt: string;
+    requiresReview: boolean;
+  };
 };
 
 type CardTerminalPublicConfig = {
@@ -308,12 +341,14 @@ type CompletedSaleState = {
   customerName: string | null;
   customerEmail: string | null;
   cashTenderedPence: number | null;
+  creditedChangePence: number;
   totalPaidPence: number;
   receiptPrintJob: ManagedPrintJobSummary | null;
   receiptPrinterName: string | null;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+const formatCommissionBps = (basisPoints: number) => `${(basisPoints / 100).toFixed(2)}%`;
 const CARD_TERMINAL_POLL_MS = 1500;
 
 const createMockCardTerminalReference = () =>
@@ -383,6 +418,11 @@ const TENDER_METHOD_OPTIONS: Array<{ value: TenderMethod; label: string; shortLa
 ];
 
 const FALLBACK_TENDER_METHODS: TenderMethod[] = ["CARD", "CASH"];
+const LAYAWAY_DEPOSIT_METHOD_OPTIONS: Array<{ value: LayawayDepositMethod; label: string }> = [
+  { value: "CASH", label: "Cash" },
+  { value: "CARD", label: "Card" },
+  { value: "OTHER", label: "Other" },
+];
 const CUSTOMER_EMAIL_DOMAIN_SHORTCUTS = [
   "@gmail.com",
   "@hotmail.com",
@@ -403,6 +443,45 @@ const getTenderMethodLabel = (method: TenderMethod | string) =>
 const getTenderMethodShortLabel = (method: TenderMethod | string) =>
   TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.shortLabel
   ?? getTenderMethodLabel(method);
+
+const MANUAL_CONFIRMATION_TENDER_METHODS: ManualConfirmationTenderMethod[] = [
+  "BANK_TRANSFER",
+  "VOUCHER",
+  "GIFT_CARD",
+];
+
+const isManualConfirmationTenderMethod = (method: TenderMethod): method is ManualConfirmationTenderMethod =>
+  MANUAL_CONFIRMATION_TENDER_METHODS.includes(method as ManualConfirmationTenderMethod);
+
+const getManualTenderConfirmationCopy = (method: ManualConfirmationTenderMethod) => {
+  switch (method) {
+    case "BANK_TRANSFER":
+      return {
+        title: "Bank transfer confirmation",
+        description: "Confirm the transfer has been received or matched before completing this sale.",
+        buttonLabel: "Confirm transfer received",
+        confirmedLabel: "Transfer confirmed",
+        validationMessage: "Confirm bank transfer before completing the sale.",
+      };
+    case "GIFT_CARD":
+      return {
+        title: "Gift card confirmation",
+        description: "Confirm the gift card balance or authorisation has been checked before completing this sale.",
+        buttonLabel: "Confirm gift card checked",
+        confirmedLabel: "Gift card confirmed",
+        validationMessage: "Confirm gift card before completing the sale.",
+      };
+    case "VOUCHER":
+    default:
+      return {
+        title: "Voucher confirmation",
+        description: "Confirm the voucher value and reference have been checked before completing this sale.",
+        buttonLabel: "Confirm voucher checked",
+        confirmedLabel: "Voucher confirmed",
+        validationMessage: "Confirm voucher before completing the sale.",
+      };
+  }
+};
 
 const getTenderMethodIcon = (method: TenderMethod) => {
   const commonProps = {
@@ -651,9 +730,22 @@ export const PosPage = () => {
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
   const [selectedCardPaymentMode, setSelectedCardPaymentMode] = useState<CardPaymentMode>(getInitialCardPaymentMode);
+  const [confirmedManualTenderMethod, setConfirmedManualTenderMethod] = useState<ManualConfirmationTenderMethod | null>(null);
   const [posWorkstationState, setPosWorkstationState] = useState(() => getInitialPosWorkstationState());
   const [suggestedTillPointId, setSuggestedTillPointId] = useState<PosTillPointId | null>(null);
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
+  const [cashOverpaymentDisposition, setCashOverpaymentDisposition] =
+    useState<CashOverpaymentDisposition>("CHANGE");
+  const [voucherTenderedAmount, setVoucherTenderedAmount] = useState("");
+  const [voucherProviders, setVoucherProviders] = useState<VoucherProvider[]>([]);
+  const [voucherProvidersLoading, setVoucherProvidersLoading] = useState(false);
+  const [selectedVoucherProviderId, setSelectedVoucherProviderId] = useState("");
+  const [layawayPanelOpen, setLayawayPanelOpen] = useState(false);
+  const [layawayDepositAmount, setLayawayDepositAmount] = useState("");
+  const [layawayDepositMethod, setLayawayDepositMethod] = useState<LayawayDepositMethod>("CASH");
+  const [layawayExpiryDays, setLayawayExpiryDays] = useState("14");
+  const [layawayNotes, setLayawayNotes] = useState("");
+  const [savingLayaway, setSavingLayaway] = useState(false);
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
   const [printingReceipt, setPrintingReceipt] = useState(false);
   const [completedSaleEmailEditing, setCompletedSaleEmailEditing] = useState(false);
@@ -737,6 +829,37 @@ export const PosPage = () => {
   }, [selectedCustomer]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadVoucherProviders = async () => {
+      setVoucherProvidersLoading(true);
+      try {
+        const payload = await apiGet<VoucherProviderListResponse>("/api/settings/voucher-providers?activeOnly=true");
+        if (cancelled) {
+          return;
+        }
+        setVoucherProviders(payload.providers);
+        setSelectedVoucherProviderId((current) =>
+          current && payload.providers.some((provider) => provider.id === current) ? current : "",
+        );
+      } catch (loadError) {
+        if (!cancelled) {
+          error(loadError instanceof Error ? loadError.message : "Failed to load voucher companies");
+        }
+      } finally {
+        if (!cancelled) {
+          setVoucherProvidersLoading(false);
+        }
+      }
+    };
+
+    void loadVoucherProviders();
+    return () => {
+      cancelled = true;
+    };
+  }, [error]);
+
+  useEffect(() => {
     if (!checkoutMode) {
       setPaymentBasketExpanded(false);
     }
@@ -761,6 +884,10 @@ export const PosPage = () => {
     if (!enabledTenderMethods.includes(selectedTenderMethod)) {
       setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
+      setCashOverpaymentDisposition("CHANGE");
+      setVoucherTenderedAmount("");
+      setSelectedVoucherProviderId("");
+      setConfirmedManualTenderMethod(null);
     }
   }, [defaultTenderMethod, enabledTenderMethods, selectedTenderMethod]);
 
@@ -857,8 +984,18 @@ export const PosPage = () => {
 
   const chooseTenderMethod = (method: TenderMethod) => {
     setSelectedTenderMethod(method);
+    setConfirmedManualTenderMethod((current) =>
+      isManualConfirmationTenderMethod(method) && current === method ? current : null,
+    );
     if (method !== "CASH") {
       setCashTenderedAmount("");
+      setCashOverpaymentDisposition("CHANGE");
+    }
+    if (method === "VOUCHER" && payablePence > 0) {
+      setVoucherTenderedAmount((payablePence / 100).toFixed(2));
+    } else if (method !== "VOUCHER") {
+      setVoucherTenderedAmount("");
+      setSelectedVoucherProviderId("");
     }
     if (method !== "CARD") {
       setMockCardTerminalState(null);
@@ -1133,6 +1270,9 @@ export const PosPage = () => {
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
+    setCashOverpaymentDisposition("CHANGE");
+    setVoucherTenderedAmount("");
+    setSelectedVoucherProviderId("");
     setCardTerminalSession(null);
     setMockCardTerminalState(null);
     setCardTerminalMessage(null);
@@ -2053,6 +2193,10 @@ export const PosPage = () => {
       setCompletedSale(null);
       setMockCardTerminalState(null);
       setCardTerminalMessage(null);
+      setConfirmedManualTenderMethod(null);
+      setCashOverpaymentDisposition("CHANGE");
+      setVoucherTenderedAmount("");
+      setSelectedVoucherProviderId("");
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(activeBasketId)}/checkout`,
         {},
@@ -2075,6 +2219,74 @@ export const PosPage = () => {
       error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createLayaway = async () => {
+    if (!activeBasketId || !basket || basket.items.length === 0) {
+      error("No active basket to save as layaway.");
+      return;
+    }
+
+    const expiryDays = Number(layawayExpiryDays);
+    if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 90) {
+      error("Layaway expiry must be between 1 and 90 days.");
+      return;
+    }
+
+    const depositPence = layawayDepositAmount.trim()
+      ? parseCurrencyInputToPence(layawayDepositAmount)
+      : null;
+    if (layawayDepositAmount.trim() && (depositPence === null || depositPence <= 0)) {
+      error("Deposit must be a valid amount.");
+      return;
+    }
+    if (depositPence !== null && depositPence > basket.totals.totalPence) {
+      error("Deposit cannot be more than the basket total.");
+      return;
+    }
+
+    setSavingLayaway(true);
+    try {
+      const requestId = beginPosLifecycleRequest();
+      const payload = await apiPost<LayawayResponse>(
+        `/api/baskets/${encodeURIComponent(activeBasketId)}/layaway`,
+        {
+          expiryDays,
+          notes: layawayNotes.trim() || null,
+          ...(depositPence
+            ? {
+                deposit: {
+                  paymentMethod: layawayDepositMethod,
+                  amountPence: depositPence,
+                  providerRef: "POS_LAYAWAY_DEPOSIT",
+                },
+              }
+            : {}),
+        },
+      );
+      if (!canApplyPosLifecycle(requestId)) {
+        return;
+      }
+      clearStoredBasketId();
+      const nextSale = await loadSale(payload.layaway.saleId, { requestId });
+      if (!canApplyPosLifecycle(requestId)) {
+        return;
+      }
+      syncQuery({ basketId: activeBasketId, saleId: payload.layaway.saleId });
+      setLayawayPanelOpen(false);
+      setLayawayDepositAmount("");
+      setLayawayDepositMethod("CASH");
+      setLayawayNotes("");
+      success(
+        nextSale?.sale.customer?.id
+          ? "Layaway saved and stock held for this customer."
+          : "Layaway saved. Stock is held until the expiry date.",
+      );
+    } catch (layawayError) {
+      error(layawayError instanceof Error ? layawayError.message : "Could not create layaway");
+    } finally {
+      setSavingLayaway(false);
     }
   };
 
@@ -2166,6 +2378,7 @@ export const PosPage = () => {
       customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
       customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
       cashTenderedPence: null,
+      creditedChangePence: result.creditedChangePence ?? 0,
       totalPaidPence: sale.sale.totalPence,
       receiptPrintJob: null,
       receiptPrinterName: null,
@@ -2177,6 +2390,9 @@ export const PosPage = () => {
     await createBasket({ announce: false });
     setSelectedTenderMethod(defaultTenderMethod);
     setCashTenderedAmount("");
+    setCashOverpaymentDisposition("CHANGE");
+    setVoucherTenderedAmount("");
+    setSelectedVoucherProviderId("");
     success("Card payment captured.");
   };
 
@@ -2413,6 +2629,10 @@ export const PosPage = () => {
       setContextCustomerId(payload.customer?.id ?? null);
       setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
+      setCashOverpaymentDisposition("CHANGE");
+      setVoucherTenderedAmount("");
+      setSelectedVoucherProviderId("");
+      setConfirmedManualTenderMethod(null);
       setMockCardTerminalState(null);
       setCardTerminalMessage(null);
       localStorage.removeItem(ACTIVE_SALE_KEY);
@@ -2436,6 +2656,7 @@ export const PosPage = () => {
     setCompleting(true);
     try {
       const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
+      const voucherPaymentPence = parseCurrencyInputToPence(voucherTenderedAmount);
       if (payablePence > 0) {
         if (selectedTenderMethod === "CASH") {
           if (cashTenderedPence === null) {
@@ -2447,6 +2668,39 @@ export const PosPage = () => {
             error("Cash tendered must cover the total due.");
             return;
           }
+        }
+
+        if (selectedTenderMethod === "VOUCHER") {
+          if (voucherProvidersLoading) {
+            error("Voucher companies are still loading.");
+            return;
+          }
+          if (activeVoucherProviders.length > 0 && !selectedVoucherProvider) {
+            error("Choose the voucher company.");
+            return;
+          }
+          if (voucherPaymentPence === null) {
+            error("Enter the voucher value.");
+            return;
+          }
+
+          if (voucherPaymentPence < payablePence) {
+            error("Voucher value must cover the total due.");
+            return;
+          }
+
+          if (voucherPaymentPence > payablePence && !cashOverpaymentCustomer?.id) {
+            error("Attach a customer before adding voucher overpayment to store credit.");
+            return;
+          }
+        }
+
+        if (
+          isManualConfirmationTenderMethod(selectedTenderMethod)
+          && confirmedManualTenderMethod !== selectedTenderMethod
+        ) {
+          error(getManualTenderConfirmationCopy(selectedTenderMethod).validationMessage);
+          return;
         }
 
         if (selectedTenderMethod === "STORE_CREDIT") {
@@ -2471,17 +2725,34 @@ export const PosPage = () => {
             return;
           }
         } else if (isSaleTenderMethod(selectedTenderMethod)) {
+          const amountPence =
+            selectedTenderMethod === "CASH"
+              ? cashTenderedPence
+              : selectedTenderMethod === "VOUCHER"
+                ? voucherPaymentPence
+                : payablePence;
           await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
             method: selectedTenderMethod,
-            amountPence: selectedTenderMethod === "CASH" ? cashTenderedPence : payablePence,
+            amountPence,
+            ...(selectedTenderMethod === "VOUCHER" && selectedVoucherProvider
+              ? { voucherProviderId: selectedVoucherProvider.id }
+              : {}),
           });
         }
       }
 
       const result = await apiPost<CompleteSaleResult>(
         `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
-        {},
+        overpaymentCreditRequired
+          ? { overpaymentCredit: { addToStoreCredit: true } }
+          : {},
       );
+      const saleCompletionTenderedPence =
+        selectedTenderMethod === "CASH"
+          ? cashTenderedPence ?? sale.tenderSummary.totalPence
+          : selectedTenderMethod === "VOUCHER"
+            ? voucherPaymentPence ?? sale.tenderSummary.totalPence
+            : sale.tenderSummary.totalPence;
       setCompletedSale({
         saleId: sale.sale.id,
         receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
@@ -2491,7 +2762,8 @@ export const PosPage = () => {
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
         customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
         cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
-        totalPaidPence: sale.tenderSummary.totalPence,
+        creditedChangePence: result.creditedChangePence ?? 0,
+        totalPaidPence: saleCompletionTenderedPence,
         receiptPrintJob: null,
         receiptPrinterName: null,
       });
@@ -2499,7 +2771,15 @@ export const PosPage = () => {
       await createBasket();
       setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
-      success("Sale completed.");
+      setCashOverpaymentDisposition("CHANGE");
+      setVoucherTenderedAmount("");
+      setSelectedVoucherProviderId("");
+      setConfirmedManualTenderMethod(null);
+      success(
+        result.creditedChangePence && result.creditedChangePence > 0
+          ? `Sale completed. ${formatMoney(result.creditedChangePence)} added to store credit.`
+          : "Sale completed.",
+      );
     } catch (completeError) {
       const message = completeError instanceof Error ? completeError.message : "Completion failed";
       error(message);
@@ -2656,10 +2936,39 @@ export const PosPage = () => {
   const contextRemainingPence = Math.max(activeTotal - depositPaidPence, 0);
   const payablePence = sale ? remainingDuePence : contextRemainingPence;
   const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
+  const voucherTenderedPence = parseCurrencyInputToPence(voucherTenderedAmount);
+  const activeVoucherProviders = useMemo(
+    () => voucherProviders.filter((provider) => provider.isActive),
+    [voucherProviders],
+  );
+  const selectedVoucherProvider = useMemo(
+    () => activeVoucherProviders.find((provider) => provider.id === selectedVoucherProviderId) ?? null,
+    [activeVoucherProviders, selectedVoucherProviderId],
+  );
   const cashChangeDuePence =
     selectedTenderMethod === "CASH" && cashTenderedPence !== null
       ? Math.max(cashTenderedPence - payablePence, 0)
       : 0;
+  const voucherOverpaymentPence =
+    selectedTenderMethod === "VOUCHER" && voucherTenderedPence !== null
+      ? Math.max(voucherTenderedPence - payablePence, 0)
+      : 0;
+  const selectedVoucherCommissionPence =
+    selectedVoucherProvider && voucherTenderedPence !== null
+      ? Math.round((voucherTenderedPence * selectedVoucherProvider.commissionBps) / 10000)
+      : 0;
+  const selectedVoucherNetPence =
+    selectedVoucherProvider && voucherTenderedPence !== null
+      ? Math.max(voucherTenderedPence - selectedVoucherCommissionPence, 0)
+      : 0;
+  const cashOverpaymentCustomer = sale?.sale.customer ?? null;
+  const cashOverpaymentCreditSelected =
+    selectedTenderMethod === "CASH"
+    && cashChangeDuePence > 0
+    && cashOverpaymentDisposition === "STORE_CREDIT";
+  const voucherOverpaymentCreditRequired =
+    selectedTenderMethod === "VOUCHER" && voucherOverpaymentPence > 0;
+  const overpaymentCreditRequired = cashOverpaymentCreditSelected || voucherOverpaymentCreditRequired;
   const cashValidationMessage =
     selectedTenderMethod !== "CASH" || payablePence === 0
       ? null
@@ -2670,7 +2979,43 @@ export const PosPage = () => {
           : cashTenderedPence < payablePence
             ? `Cash tendered is short by ${formatMoney(payablePence - cashTenderedPence)}.`
             : null;
+  const cashOverpaymentValidationMessage =
+    cashOverpaymentCreditSelected && !cashOverpaymentCustomer?.id
+      ? "Attach a customer before adding overpayment to store credit."
+      : null;
+  const voucherValidationMessage = (() => {
+    if (selectedTenderMethod !== "VOUCHER" || payablePence === 0) {
+      return null;
+    }
+    if (voucherProvidersLoading) {
+      return "Loading voucher companies.";
+    }
+    if (activeVoucherProviders.length > 0 && !selectedVoucherProvider) {
+      return "Choose the voucher company.";
+    }
+    if (voucherTenderedAmount.trim() === "") {
+      return "Enter the voucher value.";
+    }
+    if (voucherTenderedPence === null) {
+      return "Enter a valid voucher value in pounds.";
+    }
+    if (voucherTenderedPence < payablePence) {
+      return `Voucher value is short by ${formatMoney(payablePence - voucherTenderedPence)}.`;
+    }
+    if (voucherOverpaymentPence > 0 && !cashOverpaymentCustomer?.id) {
+      return "Attach a customer before adding voucher overpayment to store credit.";
+    }
+
+    return null;
+  })();
   const quickCashAmounts = [500, 1000, 2000, 5000];
+
+  useEffect(() => {
+    if (cashChangeDuePence <= 0 && cashOverpaymentDisposition !== "CHANGE") {
+      setCashOverpaymentDisposition("CHANGE");
+    }
+  }, [cashChangeDuePence, cashOverpaymentDisposition]);
+
   const basketGroups = useMemo(() => {
     const labour = (basket?.items ?? []).filter((item) => resolvePosLineItemType(item) === "LABOUR");
     const parts = (basket?.items ?? []).filter((item) => resolvePosLineItemType(item) === "PART");
@@ -2815,18 +3160,51 @@ export const PosPage = () => {
           ? null
           : hasDeclinedMockCardTerminalSession
             ? "Card payment was declined. Try again or choose another tender."
-        : selectedCardPaymentMode === "TERMINAL"
-          ? hasConfiguredCardTerminal
-            ? "Send card payment to the terminal before completing the sale."
-            : "Send card payment to the demo terminal or choose manual approval."
-          : "Confirm card approval before completing the sale.";
-  const tenderValidationMessage = cashValidationMessage ?? storeCreditValidationMessage ?? cardValidationMessage;
+            : selectedCardPaymentMode === "TERMINAL"
+              ? hasConfiguredCardTerminal
+                ? "Send card payment to the terminal before completing the sale."
+                : "Send card payment to the demo terminal or choose manual approval."
+              : "Confirm card approval before completing the sale.";
+  const manualTenderConfirmationCopy = isManualConfirmationTenderMethod(selectedTenderMethod)
+    ? getManualTenderConfirmationCopy(selectedTenderMethod)
+    : null;
+  const manualTenderAmountPence =
+    selectedTenderMethod === "VOUCHER" && voucherTenderedPence !== null
+      ? voucherTenderedPence
+      : payablePence;
+  const manualTenderConfirmed = Boolean(
+    manualTenderConfirmationCopy
+    && confirmedManualTenderMethod === selectedTenderMethod,
+  );
+  const manualTenderValidationMessage =
+    manualTenderConfirmationCopy && payablePence > 0 && !manualTenderConfirmed
+      ? manualTenderConfirmationCopy.validationMessage
+      : null;
+  const tenderValidationMessage =
+    cashValidationMessage
+    ?? cashOverpaymentValidationMessage
+    ?? voucherValidationMessage
+    ?? storeCreditValidationMessage
+    ?? cardValidationMessage
+    ?? manualTenderValidationMessage;
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const canReturnSaleToBasket = Boolean(
     sale
     && sale.tenderSummary.tenderedPence === 0
     && !sale.payment,
   );
+  const confirmManualTenderPayment = () => {
+    if (!manualTenderConfirmationCopy || !isManualConfirmationTenderMethod(selectedTenderMethod)) {
+      return;
+    }
+    if (payablePence <= 0) {
+      success(`${getTenderMethodLabel(selectedTenderMethod)} is already covered.`);
+      return;
+    }
+
+    setConfirmedManualTenderMethod(selectedTenderMethod);
+    success(manualTenderConfirmationCopy.confirmedLabel);
+  };
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
 
@@ -2837,6 +3215,10 @@ export const PosPage = () => {
 
     setSelectedTenderMethod(defaultTenderMethod);
     setCashTenderedAmount("");
+    setCashOverpaymentDisposition("CHANGE");
+    setVoucherTenderedAmount("");
+    setSelectedVoucherProviderId("");
+    setConfirmedManualTenderMethod(null);
     await createBasket();
   };
 
@@ -2871,6 +3253,9 @@ export const PosPage = () => {
         setCompletedSale(null);
         setSelectedTenderMethod(defaultTenderMethod);
         setCashTenderedAmount("");
+        setCashOverpaymentDisposition("CHANGE");
+        setVoucherTenderedAmount("");
+        setSelectedVoucherProviderId("");
         void createBasket();
         return;
       }
@@ -2924,15 +3309,33 @@ export const PosPage = () => {
           <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
         </div>
       </div>
-      {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
+      {(
+        completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null
+      ) || completedSale.creditedChangePence > 0 ? (
         <div className="success-summary-grid success-summary-grid--cash">
           <div>
-            <div className="muted-text">Cash received</div>
-            <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
+            <div className="muted-text">
+              {completedSale.tenderMethod === "CASH" ? "Cash received" : "Voucher value"}
+            </div>
+            <div className="table-primary">
+              {formatMoney(
+                completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null
+                  ? completedSale.cashTenderedPence
+                  : completedSale.totalPaidPence,
+              )}
+            </div>
           </div>
           <div>
-            <div className="muted-text">Change due</div>
-            <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
+            <div className="muted-text">
+              {completedSale.creditedChangePence > 0 ? "Store credit added" : "Change due"}
+            </div>
+            <div className="table-primary">
+              {formatMoney(
+                completedSale.creditedChangePence > 0
+                  ? completedSale.creditedChangePence
+                  : completedSale.changeDuePence,
+              )}
+            </div>
           </div>
         </div>
       ) : null}
@@ -3620,15 +4023,24 @@ export const PosPage = () => {
                   </div>
                   {showBasketLineControls || checkoutMode ? (
                     <div className="actions-inline pos-basket-heading-actions">
-                      {showBasketLineControls ? (
-                        <button
-                          type="button"
-                          onClick={() => void clearBasket()}
-                          disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-                        >
-                          Clear basket
-                        </button>
-                      ) : null}
+                              {showBasketLineControls ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => setLayawayPanelOpen(true)}
+                                    disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                                  >
+                                    Layaway
+                                  </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void clearBasket()}
+                                  disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                                >
+                                  Clear basket
+                                </button>
+                                </>
+                              ) : null}
                       {checkoutMode ? (
                         <button
                           type="button"
@@ -4207,12 +4619,55 @@ export const PosPage = () => {
                           <strong>{formatMoney(cashTenderedPence ?? 0)}</strong>
                         </div>
                         <div className={`pos-cash-change${cashChangeDuePence > 0 ? " pos-cash-change--due" : ""}`}>
-                          <span>Change</span>
+                          <span>{cashOverpaymentCreditSelected ? "To credit" : "Change"}</span>
                           <strong>{formatMoney(cashChangeDuePence)}</strong>
                         </div>
                       </div>
 
+                      {cashChangeDuePence > 0 ? (
+                        <div className="pos-cash-overpayment-panel">
+                          <div className="pos-cash-overpayment-panel__header">
+                            <strong>Overpayment</strong>
+                            <span>{formatMoney(cashChangeDuePence)}</span>
+                          </div>
+                          <div
+                            className="pos-cash-overpayment-options"
+                            role="group"
+                            aria-label="Cash overpayment handling"
+                          >
+                            <button
+                              type="button"
+                              className={cashOverpaymentDisposition === "CHANGE" ? "primary" : ""}
+                              onClick={() => setCashOverpaymentDisposition("CHANGE")}
+                              disabled={completing}
+                            >
+                              Cash change
+                            </button>
+                            <button
+                              type="button"
+                              className={cashOverpaymentDisposition === "STORE_CREDIT" ? "primary" : ""}
+                              onClick={() => setCashOverpaymentDisposition("STORE_CREDIT")}
+                              disabled={completing || !cashOverpaymentCustomer?.id}
+                            >
+                              Store credit
+                            </button>
+                          </div>
+                          {cashOverpaymentCustomer?.id ? (
+                            <p className="muted-text">
+                              Customer: {cashOverpaymentCustomer.name}
+                            </p>
+                          ) : (
+                            <p className="muted-text pos-cash-warning">
+                              Attach a customer to add overpayment to store credit.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+
                       {cashValidationMessage ? <p className="muted-text pos-cash-warning">{cashValidationMessage}</p> : null}
+                      {cashOverpaymentValidationMessage ? (
+                        <p className="muted-text pos-cash-warning">{cashOverpaymentValidationMessage}</p>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -4229,6 +4684,123 @@ export const PosPage = () => {
                           Customer: {storeCreditCustomer?.name ?? "Linked account"}
                         </p>
                       )}
+                    </div>
+                  ) : null}
+
+                  {manualTenderConfirmationCopy ? (
+                    <div
+                      className={`quick-create-panel pos-manual-tender-panel${manualTenderConfirmed ? " pos-manual-tender-panel--confirmed" : ""}`}
+                    >
+                      <div>
+                        <strong>{manualTenderConfirmationCopy.title}</strong>
+                        <p className="muted-text">{manualTenderConfirmationCopy.description}</p>
+                        <p className="muted-text">Amount to confirm: {formatMoney(manualTenderAmountPence)}</p>
+                      </div>
+                      {selectedTenderMethod === "VOUCHER" ? (
+                        <div className="pos-voucher-panel">
+                          <label>
+                            Voucher company
+                            <select
+                              data-testid="pos-voucher-provider"
+                              value={selectedVoucherProviderId}
+                              onChange={(event) => {
+                                setSelectedVoucherProviderId(event.target.value);
+                                setConfirmedManualTenderMethod((current) =>
+                                  current === "VOUCHER" ? null : current,
+                                );
+                              }}
+                              disabled={completing || voucherProvidersLoading || activeVoucherProviders.length === 0}
+                            >
+                              <option value="">
+                                {voucherProvidersLoading
+                                  ? "Loading voucher companies"
+                                  : activeVoucherProviders.length > 0
+                                    ? "Choose voucher company"
+                                    : "No voucher companies configured"}
+                              </option>
+                              {activeVoucherProviders.map((provider) => (
+                                <option key={provider.id} value={provider.id}>
+                                  {provider.name} ({formatCommissionBps(provider.commissionBps)})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {selectedVoucherProvider ? (
+                            <p className="muted-text pos-voucher-provider-note">
+                              Commission {formatCommissionBps(selectedVoucherProvider.commissionBps)}.
+                              Net expected {formatMoney(selectedVoucherNetPence)}.
+                            </p>
+                          ) : activeVoucherProviders.length === 0 && !voucherProvidersLoading ? (
+                            <p className="muted-text pos-voucher-provider-note">
+                              Add voucher companies in Settings to track provider commission on each sale.
+                            </p>
+                          ) : null}
+                          <label>
+                            Voucher value
+                            <input
+                              data-testid="pos-voucher-value"
+                              inputMode="decimal"
+                              value={voucherTenderedAmount}
+                              onChange={(event) => {
+                                setVoucherTenderedAmount(event.target.value);
+                                setConfirmedManualTenderMethod((current) =>
+                                  current === "VOUCHER" ? null : current,
+                                );
+                              }}
+                              placeholder="0.00"
+                              disabled={completing}
+                            />
+                          </label>
+                          <div className="pos-voucher-summary" aria-label="Voucher payment summary">
+                            <div>
+                              <span>Due</span>
+                              <strong>{formatMoney(payablePence)}</strong>
+                            </div>
+                            <div>
+                              <span>Voucher</span>
+                              <strong>{formatMoney(voucherTenderedPence ?? 0)}</strong>
+                            </div>
+                            <div className={voucherOverpaymentPence > 0 ? "pos-voucher-credit-due" : ""}>
+                              <span>To credit</span>
+                              <strong>{formatMoney(voucherOverpaymentPence)}</strong>
+                            </div>
+                          </div>
+                          {voucherOverpaymentPence > 0 ? (
+                            <div className="pos-voucher-credit-note">
+                              {cashOverpaymentCustomer?.id ? (
+                                <p className="muted-text">
+                                  {formatMoney(voucherOverpaymentPence)} will be added to {cashOverpaymentCustomer.name}'s store credit.
+                                  Change is not available for voucher payments.
+                                </p>
+                              ) : (
+                                <p className="muted-text pos-cash-warning">
+                                  Attach a customer to add voucher overpayment to store credit. Change is not available.
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
+                          {voucherValidationMessage ? (
+                            <p className="muted-text pos-cash-warning">{voucherValidationMessage}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="pos-manual-tender-status">
+                        {manualTenderConfirmed ? manualTenderConfirmationCopy.confirmedLabel : "Awaiting staff confirmation"}
+                      </div>
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid={`pos-confirm-${selectedTenderMethod.toLowerCase().replaceAll("_", "-")}`}
+                        onClick={confirmManualTenderPayment}
+                        disabled={
+                          payablePence <= 0
+                          || completing
+                          || manualTenderConfirmed
+                          || (selectedTenderMethod === "VOUCHER" && Boolean(voucherValidationMessage))
+                        }
+                      >
+                        {manualTenderConfirmed ? manualTenderConfirmationCopy.confirmedLabel : manualTenderConfirmationCopy.buttonLabel}
+                      </button>
                     </div>
                   ) : null}
                 </>
@@ -4266,9 +4838,98 @@ export const PosPage = () => {
             </section>
           </div>
         </div>
-      </section>
+              </section>
 
-      {customerProfileModalOpen && selectedCustomer?.id ? (
+              {layawayPanelOpen ? (
+                <div
+                  className="customer-profile-overlay"
+                  role="presentation"
+                  onClick={() => setLayawayPanelOpen(false)}
+                >
+                  <div
+                    className="customer-profile-modal pos-layaway-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Create layaway"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="customer-profile-modal__header">
+                      <div>
+                        <strong>Create Layaway</strong>
+                        <div className="muted-text">
+                          Stock will be held until expiry. Part-paid overdue layaways need staff review.
+                        </div>
+                      </div>
+                      <div className="actions-inline">
+                        <button type="button" onClick={() => setLayawayPanelOpen(false)} disabled={savingLayaway}>
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                    <div className="customer-profile-modal__content pos-layaway-form">
+                      <div className="pos-layaway-summary">
+                        <span>Basket total</span>
+                        <strong>{formatMoney(basket?.totals.totalPence ?? 0)}</strong>
+                      </div>
+                      <label>
+                        <span>Deposit taken now</span>
+                        <input
+                          value={layawayDepositAmount}
+                          onChange={(event) => setLayawayDepositAmount(event.target.value)}
+                          placeholder="0.00"
+                          inputMode="decimal"
+                          disabled={savingLayaway}
+                        />
+                      </label>
+                      <label>
+                        <span>Deposit method</span>
+                        <select
+                          value={layawayDepositMethod}
+                          onChange={(event) => setLayawayDepositMethod(event.target.value as LayawayDepositMethod)}
+                          disabled={savingLayaway || layawayDepositAmount.trim().length === 0}
+                        >
+                          {LAYAWAY_DEPOSIT_METHOD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Hold stock for days</span>
+                        <input
+                          value={layawayExpiryDays}
+                          onChange={(event) => setLayawayExpiryDays(event.target.value)}
+                          inputMode="numeric"
+                          disabled={savingLayaway}
+                        />
+                      </label>
+                      <label>
+                        <span>Notes</span>
+                        <textarea
+                          value={layawayNotes}
+                          onChange={(event) => setLayawayNotes(event.target.value)}
+                          rows={3}
+                          disabled={savingLayaway}
+                        />
+                      </label>
+                      <div className="pos-layaway-policy">
+                        Unpaid layaways release stock automatically after expiry. Part-paid layaways stay held and show as overdue for review.
+                      </div>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void createLayaway()}
+                        disabled={savingLayaway || !basket || basket.items.length === 0}
+                      >
+                        {savingLayaway ? "Saving..." : "Save Layaway"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {customerProfileModalOpen && selectedCustomer?.id ? (
         <div
           className="customer-profile-overlay"
           role="presentation"

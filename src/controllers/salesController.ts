@@ -191,6 +191,44 @@ export const parsePaymentFromBody = (body: unknown): {
   };
 };
 
+const parseOverpaymentCreditRequest = (body: unknown) => {
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+
+  const rawValue = (body as {
+    overpaymentCredit?: unknown;
+  }).overpaymentCredit;
+  if (rawValue === undefined) {
+    return false;
+  }
+  if (typeof rawValue === "boolean") {
+    return rawValue;
+  }
+  if (!rawValue || typeof rawValue !== "object") {
+    throw new HttpError(
+      400,
+      "overpaymentCredit must be a boolean or object",
+      "INVALID_OVERPAYMENT_CREDIT",
+    );
+  }
+
+  const payload = rawValue as {
+    addToStoreCredit?: unknown;
+    enabled?: unknown;
+  };
+  const flag = payload.addToStoreCredit ?? payload.enabled;
+  if (typeof flag !== "boolean") {
+    throw new HttpError(
+      400,
+      "overpaymentCredit.addToStoreCredit must be a boolean",
+      "INVALID_OVERPAYMENT_CREDIT",
+    );
+  }
+
+  return flag;
+};
+
 export const createSaleReturnHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     items?: Array<{ saleItemId?: string; quantity?: number }>;
@@ -262,9 +300,14 @@ export const reopenBasketFromSaleHandler = async (req: Request, res: Response) =
 
 export const completeSaleHandler = async (req: Request, res: Response) => {
   const staffActorId = getRequestStaffActorId(req);
+  const addOverpaymentToStoreCredit = parseOverpaymentCreditRequest(req.body);
   const result = await completeSaleIfEligible(
     req.params.saleId,
-    staffActorId ? { staffActorId } : {},
+    {
+      ...(staffActorId ? { staffActorId } : {}),
+      ...(addOverpaymentToStoreCredit ? { addOverpaymentToStoreCredit: true } : {}),
+      auditActor: getRequestAuditActor(req),
+    },
   );
 
   res.json(result);
@@ -274,16 +317,25 @@ export const addSaleTenderHandler = async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as {
     method?: unknown;
     amountPence?: unknown;
+    voucherProviderId?: unknown;
   };
 
   const amountPence =
     typeof body.amountPence === "number" ? body.amountPence : Number.NaN;
+  if (
+    body.voucherProviderId !== undefined
+    && body.voucherProviderId !== null
+    && typeof body.voucherProviderId !== "string"
+  ) {
+    throw new HttpError(400, "voucherProviderId must be a string or null", "INVALID_SALE_TENDER");
+  }
 
   const result = await addSaleTender(
     req.params.saleId,
     {
       method: parseSaleTenderMethod(body.method),
       amountPence,
+      voucherProviderId: body.voucherProviderId as string | null | undefined,
     },
     getRequestStaffActorId(req),
   );

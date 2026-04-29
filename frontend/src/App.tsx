@@ -39,6 +39,7 @@ import {
   InventoryStocktakesPage,
   InventoryVelocityPage,
   LiabilitiesReviewPage,
+  LayawaysPage,
   LoginPage,
   ManagementDashboardPage,
   NavigationPlaceholderPage,
@@ -348,6 +349,7 @@ const AuthedApp = () => (
           )}
         />
         <Route path="/pos" element={<PosPage />} />
+        <Route path="/pos/layaways" element={<LayawaysPage />} />
         <Route
           path="/sales-history/transactions"
           element={<SalesHistoryPage />}
@@ -641,6 +643,7 @@ const AuthedApp = () => (
         <Route path="/settings/printers" element={adminOnly(<SystemSettingsPage mode="printers" />)} />
         <Route path="/settings/workshop" element={adminOnly(<SystemSettingsPage mode="workshop" />)} />
         <Route path="/settings/shipping" element={adminOnly(<SystemSettingsPage mode="shipping" />)} />
+        <Route path="/settings/vouchers" element={adminOnly(<SystemSettingsPage mode="vouchers" />)} />
         <Route path="/settings/staff-list" element={managerOnly(<StaffManagementPage />)} />
         <Route path="/settings/roles-permissions" element={adminOnly(<AdminReviewPage />)} />
         <Route path="/settings/staff-rota" element={managerOnly(<StaffRotaToolsPage />)} />

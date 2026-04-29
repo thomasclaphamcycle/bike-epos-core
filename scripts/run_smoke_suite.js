@@ -26,6 +26,7 @@ const baselineSteps = [
   "test:m37",
   "test:m38",
   "test:m39",
+  "test:layaways",
   "test:m40",
   "test:m41",
   "test:m42",

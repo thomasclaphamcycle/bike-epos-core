@@ -1,0 +1,46 @@
+### Create layaway from basket with optional deposit
+POST http://localhost:3100/api/baskets/{{basketId}}/layaway
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: staff-demo
+
+{
+  "expiryDays": 14,
+  "deposit": {
+    "paymentMethod": "CASH",
+    "amountPence": 500,
+    "providerRef": "POS_LAYAWAY_DEPOSIT"
+  },
+  "notes": "Customer collecting next weekend"
+}
+
+### List open layaways
+GET http://localhost:3100/api/layaways
+X-Staff-Role: STAFF
+X-Staff-Id: staff-demo
+
+### Include completed, cancelled, and expired layaways
+GET http://localhost:3100/api/layaways?includeClosed=true
+X-Staff-Role: MANAGER
+X-Staff-Id: manager-demo
+
+### Get one layaway
+GET http://localhost:3100/api/layaways/{{layawayId}}
+X-Staff-Role: STAFF
+X-Staff-Id: staff-demo
+
+### Complete a fully paid layaway
+POST http://localhost:3100/api/layaways/{{layawayId}}/complete
+Content-Type: application/json
+X-Staff-Role: STAFF
+X-Staff-Id: staff-demo
+
+{}
+
+### Release an unpaid layaway
+POST http://localhost:3100/api/layaways/{{layawayId}}/cancel
+Content-Type: application/json
+X-Staff-Role: MANAGER
+X-Staff-Id: manager-demo
+
+{}
