@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiError, apiGet, apiPatch, apiPost } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
@@ -251,6 +251,7 @@ export const InventoryItemPage = () => {
   const [countNote, setCountNote] = useState("");
   const [submittingCount, setSubmittingCount] = useState(false);
   const [sellingPointsDraft, setSellingPointsDraft] = useState("");
+  const sellingPointsDraftRef = useRef("");
   const [savingSellingPoints, setSavingSellingPoints] = useState(false);
   const [generatingSellingPoints, setGeneratingSellingPoints] = useState(false);
   const lowStockThreshold = appConfig.operations.lowStockThreshold;
@@ -272,6 +273,11 @@ export const InventoryItemPage = () => {
     [normalizedStoredSellingPoints, sellingPointsDraft],
   );
 
+  const updateSellingPointsDraft = (value: string) => {
+    sellingPointsDraftRef.current = value;
+    setSellingPointsDraft(value);
+  };
+
   const loadInventoryDetail = async () => {
     if (!variantId) {
       return;
@@ -286,7 +292,7 @@ export const InventoryItemPage = () => {
 
       setVariant(variantPayload);
       setStock(stockPayload);
-      setSellingPointsDraft(variantPayload.product?.keySellingPoints ?? "");
+      updateSellingPointsDraft(variantPayload.product?.keySellingPoints ?? "");
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load inventory item";
       error(message);
@@ -570,7 +576,7 @@ export const InventoryItemPage = () => {
             }
           : current,
       );
-      setSellingPointsDraft(updatedProduct.keySellingPoints ?? "");
+      updateSellingPointsDraft(updatedProduct.keySellingPoints ?? "");
       success("Key selling points saved.");
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : "Failed to save key selling points";
@@ -586,7 +592,7 @@ export const InventoryItemPage = () => {
       return;
     }
 
-    if (normalizeMultilineText(sellingPointsDraft)) {
+    if (normalizeMultilineText(sellingPointsDraftRef.current)) {
       const shouldContinue = window.confirm("This will replace current selling points. Continue?");
       if (!shouldContinue) {
         return;
@@ -626,7 +632,7 @@ export const InventoryItemPage = () => {
         return;
       }
 
-      setSellingPointsDraft(generatedSellingPoints.join("\n"));
+      updateSellingPointsDraft(generatedSellingPoints.join("\n"));
       success("Selling point suggestions loaded. Review and save when you are happy.");
     } catch (generateError) {
       const message = generateError instanceof Error ? generateError.message : "Failed to generate selling points";
@@ -729,7 +735,7 @@ export const InventoryItemPage = () => {
                 <form onSubmit={saveSellingPoints}>
                   <textarea
                     value={sellingPointsDraft}
-                    onChange={(event) => setSellingPointsDraft(event.target.value)}
+                    onChange={(event) => updateSellingPointsDraft(event.target.value)}
                     rows={5}
                     disabled={!canEditSellingPoints || savingSellingPoints}
                     placeholder={"Lightweight aluminium frame\nBosch Performance Line motor\nRack, mudguards, and integrated lights"}
@@ -745,7 +751,7 @@ export const InventoryItemPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSellingPointsDraft("")}
+                      onClick={() => updateSellingPointsDraft("")}
                       disabled={!canEditSellingPoints || savingSellingPoints || generatingSellingPoints || !sellingPointsDraft}
                     >
                       Clear
@@ -760,7 +766,7 @@ export const InventoryItemPage = () => {
                     {sellingPointsDirty ? (
                       <button
                         type="button"
-                        onClick={() => setSellingPointsDraft(variant.product?.keySellingPoints ?? "")}
+                        onClick={() => updateSellingPointsDraft(variant.product?.keySellingPoints ?? "")}
                         disabled={savingSellingPoints}
                       >
                         Reset
