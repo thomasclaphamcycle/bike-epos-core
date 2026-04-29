@@ -6,7 +6,8 @@ import {
 import { prisma } from "../lib/prisma";
 import { DojoClient, DojoPaymentIntent, DojoTerminalSession } from "../payments/dojo/dojoClient";
 import {
-  getDojoTerminalIntegrationConfig,
+  getDojoTerminalIntegrationConfig as getPrivateDojoTerminalIntegrationConfig,
+  getDojoWorkstationHint,
   toPublicDojoTerminalIntegrationConfig,
 } from "../payments/dojo/dojoConfig";
 import { HttpError, isUuid } from "../utils/http";
@@ -26,7 +27,10 @@ type SignatureVerificationInput = {
   accepted?: boolean;
 };
 
-const MOCK_TERMINAL_ID = "dojo-mock-terminal";
+const MOCK_TERMINAL_IDS = {
+  TERMINAL_A: "dojo-mock-terminal",
+  TERMINAL_B: "dojo-mock-terminal-b",
+} as const;
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   const trimmed = value?.trim();
@@ -132,12 +136,15 @@ const toCardTerminalSessionResponse = (
   ...(salePayment ? { salePayment } : {}),
 });
 
-export const getCardTerminalIntegrationConfig = () => ({
-  config: toPublicDojoTerminalIntegrationConfig(),
+export const getCardTerminalIntegrationConfig = (remoteAddress?: string | null) => ({
+  config: toPublicDojoTerminalIntegrationConfig(
+    getPrivateDojoTerminalIntegrationConfig(),
+    getDojoWorkstationHint(remoteAddress),
+  ),
 });
 
 export const listCardTerminals = async (status = "Available") => {
-  const config = getDojoTerminalIntegrationConfig();
+  const config = getPrivateDojoTerminalIntegrationConfig();
   if (!config.enabled) {
     return {
       config: toPublicDojoTerminalIntegrationConfig(config),
@@ -148,14 +155,15 @@ export const listCardTerminals = async (status = "Available") => {
   if (config.mockMode) {
     return {
       config: toPublicDojoTerminalIntegrationConfig(config),
-      terminals: [
-        {
-          id: config.defaultTerminalId ?? MOCK_TERMINAL_ID,
-          terminalId: config.defaultTerminalId ?? MOCK_TERMINAL_ID,
-          name: "Mock Dojo terminal",
+      terminals: config.terminalRoutes.map((route) => {
+        const terminalId = route.terminalId ?? MOCK_TERMINAL_IDS[route.routeId];
+        return {
+          id: terminalId,
+          terminalId,
+          name: `Mock Dojo ${route.label}`,
           status: "Available",
-        },
-      ],
+        };
+      }),
     };
   }
 
@@ -188,6 +196,21 @@ const markCoreIntentFailed = async (intentId: string | undefined) => {
   }).catch(() => undefined);
 };
 
+const markCoreIntentFinished = async (
+  intentId: string | null | undefined,
+  status: CardTerminalSessionStatus,
+) => {
+  if (!intentId || status === "CAPTURED" || status === "AUTHORIZED") {
+    return;
+  }
+
+  const nextStatus = status === "CANCELED" ? "CANCELED" : "FAILED";
+  await prisma.paymentIntent.update({
+    where: { id: intentId },
+    data: { status: nextStatus },
+  }).catch(() => undefined);
+};
+
 export const createCardTerminalSaleSession = async (
   input: CreateTerminalSaleSessionInput,
   staffActorId?: string,
@@ -198,7 +221,7 @@ export const createCardTerminalSaleSession = async (
   }
 
   const amountPence = assertPositivePence(input.amountPence, "amountPence");
-  const config = getDojoTerminalIntegrationConfig();
+  const config = getPrivateDojoTerminalIntegrationConfig();
   if (!config.enabled) {
     throw new HttpError(503, "Dojo Pay at Counter is not enabled", "DOJO_TERMINALS_DISABLED");
   }
@@ -213,7 +236,8 @@ export const createCardTerminalSaleSession = async (
   const terminalId =
     normalizeOptionalText(input.terminalId) ??
     config.defaultTerminalId ??
-    (config.mockMode ? MOCK_TERMINAL_ID : undefined);
+    config.terminalRoutes.find((route) => route.terminalId)?.terminalId ??
+    (config.mockMode ? MOCK_TERMINAL_IDS.TERMINAL_A : undefined);
   if (!terminalId) {
     throw new HttpError(400, "terminalId is required", "DOJO_TERMINAL_REQUIRED");
   }
@@ -397,6 +421,10 @@ const updateSessionFromProviderState = async (
     }
   }
 
+  if (isFinalStatus(nextStatus)) {
+    await markCoreIntentFinished(session.corePaymentIntentId, nextStatus);
+  }
+
   const updated = await prisma.cardTerminalSession.update({
     where: { id: session.id },
     data: {
@@ -434,7 +462,7 @@ export const refreshCardTerminalSession = async (
     return toCardTerminalSessionResponse(session);
   }
 
-  const config = getDojoTerminalIntegrationConfig();
+  const config = getPrivateDojoTerminalIntegrationConfig();
   if (config.mockMode) {
     return updateSessionFromProviderState(
       session,
@@ -494,17 +522,9 @@ export const cancelCardTerminalSession = async (sessionId: string) => {
     return toCardTerminalSessionResponse(session);
   }
 
-  const config = getDojoTerminalIntegrationConfig();
+  const config = getPrivateDojoTerminalIntegrationConfig();
   if (config.mockMode) {
-    const canceled = await prisma.cardTerminalSession.update({
-      where: { id: session.id },
-      data: {
-        status: "CANCELED",
-        providerStatus: "Canceled",
-        completedAt: new Date(),
-      },
-    });
-    return toCardTerminalSessionResponse(canceled);
+    return updateSessionFromProviderState(session, "CANCELED", "Canceled", {});
   }
 
   if (!session.providerTerminalSessionId) {
@@ -518,15 +538,16 @@ export const cancelCardTerminalSession = async (sessionId: string) => {
   const client = new DojoClient(config);
   const dojoSession = await client.cancelTerminalSession(session.providerTerminalSessionId);
   const canceledStatus = toTerminalSessionStatus(dojoSession.status);
-  const updated = await prisma.cardTerminalSession.update({
-    where: { id: session.id },
-    data: {
-      status: canceledStatus === "UNKNOWN" ? "CANCELED" : canceledStatus,
-      providerStatus: normalizeOptionalText(dojoSession.status) ?? "Canceled",
-      ...(isFinalStatus(canceledStatus) ? { completedAt: new Date() } : {}),
+  return updateSessionFromProviderState(
+    session,
+    canceledStatus === "UNKNOWN" ? "CANCELED" : canceledStatus,
+    normalizeOptionalText(dojoSession.status) ?? "Canceled",
+    {
+      notificationEvents: dojoSession.notificationEvents,
+      customerReceipt: dojoSession.customerReceipt,
+      merchantReceipt: dojoSession.merchantReceipt,
     },
-  });
-  return toCardTerminalSessionResponse(updated);
+  );
 };
 
 export const respondToCardTerminalSignature = async (
@@ -546,7 +567,7 @@ export const respondToCardTerminalSignature = async (
     throw new HttpError(404, "Card terminal session not found", "CARD_TERMINAL_SESSION_NOT_FOUND");
   }
 
-  const config = getDojoTerminalIntegrationConfig();
+  const config = getPrivateDojoTerminalIntegrationConfig();
   if (config.mockMode) {
     return updateSessionFromProviderState(
       session,

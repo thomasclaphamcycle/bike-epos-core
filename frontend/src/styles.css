@@ -11134,6 +11134,78 @@ button.primary.workshop-status-action {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+.pos-workstation-settings-section {
+  --pos-section-accent: #0f8b8d;
+  --pos-section-accent-soft: rgba(15, 139, 141, 0.1);
+}
+
+.pos-workstation-settings-grid {
+  align-items: start;
+}
+
+.pos-workstation-settings-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #d6e2ee;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+}
+
+.pos-workstation-settings-status span {
+  display: block;
+  color: #0f8b8d;
+  font-size: 0.75rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.pos-workstation-settings-status strong {
+  display: block;
+  color: #10243a;
+  font-size: 1rem;
+}
+
+.pos-workstation-settings-status p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.pos-terminal-route-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.pos-terminal-route-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(190, 204, 217, 0.72);
+  background: #f8fbfe;
+  padding: 9px 10px;
+}
+
+.pos-terminal-route-row span {
+  color: #50667b;
+  font-weight: 800;
+}
+
+.pos-terminal-route-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #17283a;
+}
+
+.pos-workstation-settings-actions {
+  justify-content: flex-end;
+}
+
 .pos-quick-add-settings-panel,
 .pos-quick-add-settings-list {
   display: grid;
@@ -14323,7 +14395,7 @@ body.rota-row-drag-copy-active {
 
 .pos-side-column {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 0;
   height: 100%;
   min-height: 0;
@@ -14342,7 +14414,7 @@ body.rota-row-drag-copy-active {
 }
 
 .pos-side-column--checkout {
-  grid-template-rows: auto auto max-content;
+  grid-template-rows: auto auto auto max-content;
   gap: 8px;
   align-content: start;
   overflow-y: auto;
@@ -14918,6 +14990,81 @@ body.rota-row-drag-copy-active {
 
 .pos-side-column .pos-panel-heading .muted-text {
   font-size: 0.75rem;
+}
+
+.pos-workstation-panel {
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(117, 143, 166, 0.32);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.pos-workstation-panel--warning {
+  border-color: rgba(210, 142, 42, 0.55);
+  background: rgba(255, 248, 235, 0.68);
+}
+
+.pos-workstation-setup-link,
+.pos-card-terminal-route .button-link {
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pos-workstation-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pos-workstation-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.pos-workstation-summary span {
+  color: #657689;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pos-workstation-summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #193149;
+  font-size: 0.86rem;
+}
+
+.pos-workstation-warning {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pos-workstation-warning p {
+  margin: 0;
+  color: #7b4a0f;
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.pos-workstation-warning button {
+  min-height: 30px;
+  padding-inline: 9px;
+  white-space: nowrap;
 }
 
 .pos-side-column .selected-customer-panel {
@@ -15920,7 +16067,7 @@ body.rota-row-drag-copy-active {
 }
 
 .pos-payment-panel {
-  grid-row: 3;
+  grid-row: 4;
   align-self: stretch;
   min-height: 0;
   padding: 12px 12px 0;
@@ -16029,8 +16176,9 @@ body.rota-row-drag-copy-active {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  border: 1px solid rgba(93, 142, 190, 0.48);
-  background: rgba(244, 250, 255, 0.78);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .pos-card-panel p {
@@ -16039,6 +16187,343 @@ body.rota-row-drag-copy-active {
 
 .pos-card-panel .primary {
   width: 100%;
+}
+
+.pos-card-panel__header {
+  min-width: 0;
+}
+
+.pos-side-column .quick-create-panel .pos-card-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pos-card-mode-switch button,
+.pos-card-mode-switch .primary {
+  width: auto;
+  min-height: 40px;
+  padding-inline: 8px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pos-card-terminal-card,
+.pos-card-manual-fallback {
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(116, 146, 171, 0.42);
+  background: rgba(247, 250, 253, 0.86);
+  padding: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.pos-card-terminal-card {
+  display: grid;
+  gap: 12px;
+}
+
+.pos-card-terminal-card--ready {
+  border-color: rgba(62, 151, 111, 0.5);
+  background: linear-gradient(180deg, rgba(241, 252, 246, 0.92) 0%, rgba(246, 251, 255, 0.84) 100%);
+}
+
+.pos-card-terminal-card--pending {
+  border-color: rgba(206, 171, 110, 0.55);
+  background: linear-gradient(180deg, rgba(255, 250, 240, 0.94) 0%, rgba(248, 251, 254, 0.86) 100%);
+}
+
+.pos-card-terminal-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, max-content);
+  gap: 10px;
+  align-items: start;
+}
+
+.pos-card-terminal-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.pos-card-terminal-card__copy strong,
+.pos-card-manual-fallback strong {
+  color: #163047;
+}
+
+.pos-card-terminal-pill {
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid rgba(78, 113, 144, 0.22);
+  background: rgba(228, 238, 247, 0.92);
+  color: #264967;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.pos-card-terminal-amount {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  color: #526b80;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.pos-card-terminal-amount strong {
+  color: #552407;
+  font-size: 1.18rem;
+}
+
+.pos-card-terminal-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.pos-card-terminal-controls label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  color: #243746;
+}
+
+.pos-card-terminal-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(122, 143, 164, 0.32);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 9px 10px;
+}
+
+.pos-card-terminal-route--warning {
+  border-color: rgba(210, 142, 42, 0.52);
+  background: rgba(255, 248, 235, 0.74);
+}
+
+.pos-card-terminal-route__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pos-card-terminal-route__copy span {
+  color: #60778b;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pos-card-terminal-route__copy strong {
+  color: #17314a;
+  font-size: 0.93rem;
+}
+
+.pos-card-terminal-route__copy em {
+  color: #8a551e;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.pos-card-terminal-route button,
+.pos-card-terminal-route .button-link {
+  min-height: 34px;
+  padding-inline: 12px;
+}
+
+.pos-card-terminal-routing-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px dashed rgba(120, 143, 163, 0.48);
+  background: rgba(255, 255, 255, 0.48);
+  padding: 10px;
+}
+
+.pos-card-terminal-routing-controls label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: #435c72;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.pos-card-terminal-routing-controls select {
+  width: 100%;
+}
+
+.pos-card-terminal-routing-controls button {
+  grid-column: 1 / -1;
+}
+
+.pos-card-terminal-traffic {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 143, 164, 0.34);
+  background: rgba(255, 255, 255, 0.62);
+  padding: 10px;
+}
+
+.pos-card-terminal-signal {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #eff4f8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 18px rgba(31, 49, 66, 0.12);
+}
+
+.pos-card-terminal-light {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #8291a0;
+  box-shadow: 0 0 0 6px rgba(130, 145, 160, 0.14);
+}
+
+.pos-card-terminal-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(217, 133, 35, 0.24);
+  border-top-color: #d98523;
+  animation: pos-card-terminal-spin 0.78s linear infinite;
+}
+
+.pos-card-terminal-traffic__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pos-card-terminal-traffic__copy span {
+  color: #61778b;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pos-card-terminal-traffic__copy strong {
+  color: #17314a;
+}
+
+.pos-card-terminal-traffic__copy p {
+  margin: 0;
+  color: #506b82;
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.pos-card-terminal-traffic--pending {
+  border-color: rgba(217, 133, 35, 0.5);
+  background: rgba(255, 247, 232, 0.78);
+}
+
+.pos-card-terminal-traffic--pending .pos-card-terminal-signal {
+  background: #fff1d9;
+}
+
+.pos-card-terminal-traffic--approved {
+  border-color: rgba(54, 153, 105, 0.54);
+  background: rgba(240, 252, 246, 0.84);
+}
+
+.pos-card-terminal-traffic--approved .pos-card-terminal-light {
+  background: #28925a;
+  box-shadow: 0 0 0 6px rgba(40, 146, 90, 0.15);
+}
+
+.pos-card-terminal-traffic--declined {
+  border-color: rgba(194, 66, 66, 0.54);
+  background: rgba(255, 241, 241, 0.84);
+}
+
+.pos-card-terminal-traffic--declined .pos-card-terminal-light {
+  background: #c53c3c;
+  box-shadow: 0 0 0 6px rgba(197, 60, 60, 0.15);
+}
+
+@keyframes pos-card-terminal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pos-card-terminal-actions {
+  gap: 8px;
+}
+
+.pos-card-terminal-actions button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pos-card-terminal-outcomes {
+  gap: 8px;
+}
+
+.pos-card-terminal-outcomes button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pos-card-terminal-approve {
+  border-color: rgba(39, 140, 85, 0.44);
+  background: #ecfbf2;
+  color: #176c42;
+}
+
+.pos-card-terminal-decline {
+  border-color: rgba(184, 55, 55, 0.38);
+  background: #fff0ef;
+  color: #923030;
+}
+
+.pos-card-terminal-status {
+  font-weight: 700;
+  color: #294963;
+}
+
+.pos-card-terminal-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(120, 143, 163, 0.5);
+  background: rgba(255, 255, 255, 0.56);
+  padding: 9px 10px;
+  color: #566f84;
+  font-weight: 800;
+}
+
+.pos-card-terminal-placeholder span {
+  color: #74879a;
+  font-size: 0.82rem;
+}
+
+.pos-card-manual-fallback {
+  display: grid;
+  gap: 10px;
+  border-color: rgba(219, 151, 98, 0.48);
+  background: rgba(255, 249, 244, 0.86);
 }
 
 .pos-cash-panel {

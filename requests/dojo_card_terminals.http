@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:3100
+@saleId = replace-with-sale-uuid
+@terminalSessionId = replace-with-terminal-session-uuid
+@terminalId = dojo-mock-terminal
+
+# Terminal A/B provider IDs are exposed by /api/payments/terminal-config when
+# DOJO_TERMINAL_A_ID and DOJO_TERMINAL_B_ID are configured.
+
+### Inspect public Dojo terminal configuration
+GET {{baseUrl}}/api/payments/terminal-config
+X-Staff-Role: STAFF
+
+### List available Dojo terminals
+GET {{baseUrl}}/api/payments/terminals
+X-Staff-Role: STAFF
+
+### Start a card terminal sale session
+POST {{baseUrl}}/api/payments/terminal-sessions
+Content-Type: application/json
+X-Staff-Role: STAFF
+
+{
+  "saleId": "{{saleId}}",
+  "amountPence": 1299,
+  "terminalId": "{{terminalId}}"
+}
+
+### Refresh a card terminal session
+GET {{baseUrl}}/api/payments/terminal-sessions/{{terminalSessionId}}
+X-Staff-Role: STAFF
+
+### Cancel a card terminal session
+POST {{baseUrl}}/api/payments/terminal-sessions/{{terminalSessionId}}/cancel
+Content-Type: application/json
+X-Staff-Role: STAFF
+
+{}
+
+### Respond to signature verification
+POST {{baseUrl}}/api/payments/terminal-sessions/{{terminalSessionId}}/signature
+Content-Type: application/json
+X-Staff-Role: STAFF
+
+{
+  "accepted": true
+}

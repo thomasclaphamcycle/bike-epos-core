@@ -31,6 +31,16 @@ import {
   type PosSaleSource,
   type SaleContext,
 } from "../features/pos/posContext";
+import {
+  getCardTerminalRoute,
+  getDefaultTerminalRouteIdForTill,
+  getPosTillPoint,
+  getStoredPosWorkstationAssignment,
+  isPosTillPointId,
+  saveStoredPosWorkstationAssignment,
+  type CardTerminalRouteId,
+  type PosTillPointId,
+} from "../features/pos/tillWorkstation";
 import { toBackendUrl } from "../utils/backendUrl";
 import { isExactLookupMatch, looksLikeScannerInput } from "../utils/barcode";
 
@@ -184,6 +194,21 @@ type CompleteSaleResult = {
 
 type TenderMethod = AppConfig["pos"]["enabledTenderMethods"][number];
 type SaleTenderMethod = Exclude<TenderMethod, "STORE_CREDIT">;
+type CardPaymentMode = "TERMINAL" | "MANUAL";
+type MockCardTerminalStatus = "PENDING" | "APPROVED" | "DECLINED";
+type CardTerminalTrafficState = "idle" | "pending" | "approved" | "declined";
+
+type MockCardTerminalState = {
+  status: MockCardTerminalStatus;
+  amountPence: number;
+  tillPointId: PosTillPointId;
+  terminalRouteId: CardTerminalRouteId;
+  terminalLabel: string;
+  reference: string;
+  message: string;
+  requestedAt: string;
+  completedAt: string | null;
+};
 
 type CreditBalanceResponse = {
   account: {
@@ -210,6 +235,66 @@ type SaleTenderSummaryResponse = {
   }>;
 };
 
+type CardTerminalPublicConfig = {
+  provider: "DOJO";
+  enabled: boolean;
+  configured: boolean;
+  mockMode: boolean;
+  defaultTerminalId: string | null;
+  terminalRoutes: Array<{
+    routeId: CardTerminalRouteId;
+    label: string;
+    terminalId: string | null;
+  }>;
+  workstationHint: {
+    remoteAddress: string | null;
+    suggestedTillPointId: PosTillPointId | null;
+  };
+  currencyCode: string;
+};
+
+type CardTerminalOption = {
+  id: string;
+  terminalId: string;
+  name: string;
+  status: string;
+  tid?: string | null;
+};
+
+type CardTerminalSessionState = {
+  id: string;
+  provider: "DOJO";
+  status: string;
+  saleId: string;
+  corePaymentIntentId: string | null;
+  saleTenderId: string | null;
+  providerPaymentIntentId: string | null;
+  providerTerminalSessionId: string | null;
+  terminalId: string;
+  amountPence: number;
+  currencyCode: string;
+  providerStatus: string | null;
+  providerReference: string | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  isFinal: boolean;
+};
+
+type CardTerminalConfigResponse = {
+  config: CardTerminalPublicConfig;
+};
+
+type CardTerminalListResponse = CardTerminalConfigResponse & {
+  terminals: CardTerminalOption[];
+};
+
+type CardTerminalSessionResponse = {
+  session: CardTerminalSessionState;
+};
+
 type CompletedSaleState = {
   saleId: string;
   receiptUrl: string;
@@ -223,6 +308,64 @@ type CompletedSaleState = {
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+const CARD_TERMINAL_POLL_MS = 1500;
+
+const createMockCardTerminalReference = () =>
+  `MOCK-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 12)}`;
+
+const getInitialPosWorkstationState = () => {
+  const assignment = getStoredPosWorkstationAssignment();
+  const terminalRouteId = assignment.terminalRouteId
+    ?? (assignment.tillPointId ? getDefaultTerminalRouteIdForTill(assignment.tillPointId) : "TERMINAL_A");
+
+  return {
+    tillPointId: assignment.tillPointId,
+    terminalRouteId,
+    terminalRouteOverride: assignment.terminalRouteOverride,
+  };
+};
+
+const getInitialCardPaymentMode = (): CardPaymentMode =>
+  getStoredPosWorkstationAssignment().tillPointId ? "TERMINAL" : "MANUAL";
+
+const resolveCardTerminalRouteProviderId = (
+  routeId: CardTerminalRouteId,
+  terminals: CardTerminalOption[],
+  config: CardTerminalPublicConfig | null,
+) => {
+  const configuredRoute = config?.terminalRoutes.find((route) => route.routeId === routeId);
+  if (configuredRoute?.terminalId) {
+    return configuredRoute.terminalId;
+  }
+
+  const routeIndex = routeId === "TERMINAL_A" ? 0 : 1;
+  const terminal = terminals[routeIndex] ?? terminals[0];
+  return terminal?.terminalId || terminal?.id || config?.defaultTerminalId || "";
+};
+
+const getCardTerminalRouteLabel = (
+  routeId: CardTerminalRouteId,
+  terminals: CardTerminalOption[],
+  config: CardTerminalPublicConfig | null,
+) => {
+  const route = getCardTerminalRoute(routeId);
+  if (!config?.enabled || !config.configured) {
+    return route.label;
+  }
+
+  const configuredRoute = config.terminalRoutes.find((entry) => entry.routeId === routeId);
+  const configuredTerminal = configuredRoute?.terminalId
+    ? terminals.find((terminal) =>
+        terminal.terminalId === configuredRoute.terminalId || terminal.id === configuredRoute.terminalId)
+    : null;
+  if (configuredTerminal) {
+    return configuredTerminal.name || configuredTerminal.terminalId || route.label;
+  }
+
+  const routeIndex = routeId === "TERMINAL_A" ? 0 : 1;
+  const terminal = terminals[routeIndex];
+  return terminal?.name || terminal?.terminalId || terminal?.id || configuredRoute?.label || route.label;
+};
 
 const TENDER_METHOD_OPTIONS: Array<{ value: TenderMethod; label: string; shortLabel: string }> = [
   { value: "CARD", label: "Card", shortLabel: "Card" },
@@ -243,6 +386,51 @@ const getTenderMethodLabel = (method: TenderMethod | string) =>
 const getTenderMethodShortLabel = (method: TenderMethod | string) =>
   TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.shortLabel
   ?? getTenderMethodLabel(method);
+
+const getCardTerminalStatusLabel = (session: CardTerminalSessionState | null) => {
+  if (!session) {
+    return null;
+  }
+
+  if (session.lastErrorMessage) {
+    return session.lastErrorMessage;
+  }
+
+  switch (session.status) {
+    case "CREATED":
+    case "INITIATED":
+      return "Waiting for the customer on the card terminal.";
+    case "SIGNATURE_VERIFICATION_REQUIRED":
+      return "Signature verification is required.";
+    case "AUTHORIZED":
+      return "Card payment authorized.";
+    case "CAPTURED":
+      return "Card payment captured.";
+    case "DECLINED":
+      return "Card payment declined.";
+    case "CANCELED":
+      return "Card payment canceled.";
+    case "EXPIRED":
+      return "Card payment expired.";
+    case "FAILED":
+      return "Card payment failed.";
+    default:
+      return session.providerStatus ?? "Card terminal status unknown.";
+  }
+};
+
+const getCardTerminalSetupLabel = (config: CardTerminalPublicConfig | null) => {
+  if (!config) {
+    return "Checking";
+  }
+  if (config.enabled && config.configured) {
+    return config.mockMode ? "Mock ready" : "Ready";
+  }
+  if (config.enabled) {
+    return "Details needed";
+  }
+  return "Setup pending";
+};
 
 const getPosReceiptPrintButtonLabel = (
   queueing: boolean,
@@ -331,6 +519,7 @@ export const PosPage = () => {
   const newCustomerNameInputRef = useRef<HTMLInputElement | null>(null);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
+  const cardTerminalPollTimeoutRef = useRef<number | null>(null);
   const pendingQuerySyncFrameRef = useRef<number | null>(null);
   const searchFocusFrameRef = useRef<number | null>(null);
   const basketItemRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -364,6 +553,9 @@ export const PosPage = () => {
   const [saleContext, setSaleContext] = useState<SaleContext>(DEFAULT_SALE_CONTEXT);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
+  const [selectedCardPaymentMode, setSelectedCardPaymentMode] = useState<CardPaymentMode>(getInitialCardPaymentMode);
+  const [posWorkstationState, setPosWorkstationState] = useState(() => getInitialPosWorkstationState());
+  const [suggestedTillPointId, setSuggestedTillPointId] = useState<PosTillPointId | null>(null);
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
   const [completedSale, setCompletedSale] = useState<CompletedSaleState | null>(null);
   const [printingReceipt, setPrintingReceipt] = useState(false);
@@ -371,6 +563,13 @@ export const PosPage = () => {
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [confirmingCardPayment, setConfirmingCardPayment] = useState(false);
+  const [cardTerminalConfig, setCardTerminalConfig] = useState<CardTerminalPublicConfig | null>(null);
+  const [cardTerminals, setCardTerminals] = useState<CardTerminalOption[]>([]);
+  const [, setSelectedCardTerminalId] = useState("");
+  const [cardTerminalSession, setCardTerminalSession] = useState<CardTerminalSessionState | null>(null);
+  const [mockCardTerminalState, setMockCardTerminalState] = useState<MockCardTerminalState | null>(null);
+  const [cardTerminalLoading, setCardTerminalLoading] = useState(false);
+  const [cardTerminalMessage, setCardTerminalMessage] = useState<string | null>(null);
   const [returningToBasket, setReturningToBasket] = useState(false);
 
   const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
@@ -383,6 +582,16 @@ export const PosPage = () => {
     return enabled.length > 0 ? enabled : FALLBACK_TENDER_METHODS;
   }, [appConfig.pos.enabledTenderMethods]);
   const defaultTenderMethod = enabledTenderMethods[0] ?? "CARD";
+  const cardTerminalConfigured = Boolean(cardTerminalConfig?.enabled && cardTerminalConfig.configured);
+  const selectedTillPoint = posWorkstationState.tillPointId
+    ? getPosTillPoint(posWorkstationState.tillPointId)
+    : null;
+  const selectedCardTerminalRouteId = posWorkstationState.terminalRouteId;
+  const defaultCardTerminalRouteId = selectedTillPoint?.defaultTerminalRouteId ?? "TERMINAL_A";
+  const selectedCardTerminalRoute = getCardTerminalRoute(selectedCardTerminalRouteId);
+  const routedCardTerminalProviderId = cardTerminalConfigured
+    ? resolveCardTerminalRouteProviderId(selectedCardTerminalRouteId, cardTerminals, cardTerminalConfig)
+    : selectedCardTerminalRoute.mockTerminalId;
 
   const basketId = searchParams.get("basketId");
   const saleId = searchParams.get("saleId");
@@ -425,6 +634,31 @@ export const PosPage = () => {
       setCashTenderedAmount("");
     }
   }, [defaultTenderMethod, enabledTenderMethods, selectedTenderMethod]);
+
+  useEffect(() => {
+    if (!posWorkstationState.tillPointId) {
+      return;
+    }
+
+    try {
+      saveStoredPosWorkstationAssignment({
+        tillPointId: posWorkstationState.tillPointId,
+        terminalRouteId: posWorkstationState.terminalRouteId,
+        terminalRouteOverride: posWorkstationState.terminalRouteOverride,
+        source: "manual",
+      });
+    } catch {
+      // Local storage is only a workstation convenience; POS can continue without it.
+    }
+  }, [posWorkstationState]);
+
+  useEffect(() => {
+    if (!cardTerminalConfigured || !routedCardTerminalProviderId) {
+      return;
+    }
+
+    setSelectedCardTerminalId(routedCardTerminalProviderId);
+  }, [cardTerminalConfigured, routedCardTerminalProviderId]);
 
   useEffect(() => {
     if (!selectedCustomer?.id && customerProfileModalOpen) {
@@ -496,6 +730,46 @@ export const PosPage = () => {
     setSelectedTenderMethod(method);
     if (method !== "CASH") {
       setCashTenderedAmount("");
+    }
+    if (method !== "CARD") {
+      setMockCardTerminalState(null);
+      setCardTerminalMessage(null);
+    }
+  };
+
+  const chooseCardPaymentMode = (mode: CardPaymentMode) => {
+    setSelectedCardPaymentMode(mode);
+    if (mode === "MANUAL") {
+      setMockCardTerminalState(null);
+      setCardTerminalMessage(null);
+    }
+  };
+
+  const clearCardTerminalRoutePreview = () => {
+    setMockCardTerminalState(null);
+    setCardTerminalMessage(null);
+    setCardTerminalSession((current) => (current?.isFinal ? null : current));
+  };
+
+  const chooseTillPoint = (id: PosTillPointId) => {
+    if (mockCardTerminalState?.status === "PENDING" || (cardTerminalSession && !cardTerminalSession.isFinal)) {
+      return;
+    }
+
+    const nextDefaultTerminalRouteId = getDefaultTerminalRouteIdForTill(id);
+    setPosWorkstationState({
+      tillPointId: id,
+      terminalRouteId: nextDefaultTerminalRouteId,
+      terminalRouteOverride: false,
+    });
+    setSuggestedTillPointId(null);
+    clearCardTerminalRoutePreview();
+  };
+
+  const clearCardTerminalPoll = () => {
+    if (cardTerminalPollTimeoutRef.current) {
+      window.clearTimeout(cardTerminalPollTimeoutRef.current);
+      cardTerminalPollTimeoutRef.current = null;
     }
   };
 
@@ -708,6 +982,10 @@ export const PosPage = () => {
     setSale(null);
     setReceiptUrl(null);
     setCashTenderedAmount("");
+    setCardTerminalSession(null);
+    setMockCardTerminalState(null);
+    setCardTerminalMessage(null);
+    clearCardTerminalPoll();
     if (!options?.preserveTransientUi) {
       setSearchText("");
       setSearchRows([]);
@@ -750,6 +1028,59 @@ export const PosPage = () => {
       if (pendingQuerySyncFrameRef.current) {
         window.cancelAnimationFrame(pendingQuerySyncFrameRef.current);
       }
+      clearCardTerminalPoll();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCardTerminalIntegration = async () => {
+      try {
+        const configPayload = await apiGet<CardTerminalConfigResponse>("/api/payments/terminal-config");
+        if (cancelled) {
+          return;
+        }
+
+        setCardTerminalConfig(configPayload.config);
+        const suggestedTillPoint = configPayload.config.workstationHint?.suggestedTillPointId;
+        if (
+          isPosTillPointId(suggestedTillPoint)
+          && !getStoredPosWorkstationAssignment().tillPointId
+        ) {
+          setSuggestedTillPointId(suggestedTillPoint);
+        }
+
+        if (!configPayload.config.enabled || !configPayload.config.configured) {
+          setCardTerminals([]);
+          setSelectedCardTerminalId("");
+          return;
+        }
+
+        const terminalPayload = await apiGet<CardTerminalListResponse>("/api/payments/terminals");
+        if (cancelled) {
+          return;
+        }
+
+        const firstTerminalId = terminalPayload.terminals[0]?.terminalId || terminalPayload.terminals[0]?.id || "";
+        setCardTerminalConfig(terminalPayload.config);
+        setCardTerminals(terminalPayload.terminals);
+        setSelectedCardTerminalId((current) =>
+          current || terminalPayload.config.defaultTerminalId || firstTerminalId,
+        );
+      } catch {
+        if (!cancelled) {
+          setCardTerminalConfig(null);
+          setCardTerminals([]);
+          setSelectedCardTerminalId("");
+        }
+      }
+    };
+
+    void loadCardTerminalIntegration();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -1482,6 +1813,7 @@ export const PosPage = () => {
       if (searchFocusFrameRef.current) {
         window.cancelAnimationFrame(searchFocusFrameRef.current);
       }
+      clearCardTerminalPoll();
     };
   }, []);
 
@@ -1541,6 +1873,8 @@ export const PosPage = () => {
     try {
       const requestId = beginPosLifecycleRequest();
       setCompletedSale(null);
+      setMockCardTerminalState(null);
+      setCardTerminalMessage(null);
       const payload = await apiPost<{ sale: { id: string } }>(
         `/api/baskets/${encodeURIComponent(activeBasketId)}/checkout`,
         {},
@@ -1636,6 +1970,246 @@ export const PosPage = () => {
     }
   };
 
+  const completeCardTerminalSale = async (session: CardTerminalSessionState) => {
+    if (!sale) {
+      return;
+    }
+
+    const result = await apiPost<CompleteSaleResult>(
+      `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
+      {},
+    );
+    setCompletedSale({
+      saleId: sale.sale.id,
+      receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
+      changeDuePence: result.changeDuePence,
+      tenderMethod: "CARD",
+      customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+      cashTenderedPence: null,
+      totalPaidPence: sale.sale.totalPence,
+      receiptPrintJob: null,
+      receiptPrinterName: null,
+    });
+    setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
+    setCardTerminalSession(session);
+    setCardTerminalMessage(getCardTerminalStatusLabel(session));
+    clearCardTerminalPoll();
+    await createBasket({ announce: false });
+    setSelectedTenderMethod(defaultTenderMethod);
+    setCashTenderedAmount("");
+    success("Card payment captured.");
+  };
+
+  const handleCardTerminalSessionResult = async (
+    payload: CardTerminalSessionResponse,
+  ) => {
+    const nextSession = payload.session;
+    setCardTerminalSession(nextSession);
+    setCardTerminalMessage(getCardTerminalStatusLabel(nextSession));
+
+    if (nextSession.status === "CAPTURED") {
+      setCardTerminalLoading(false);
+      await completeCardTerminalSale(nextSession);
+      return true;
+    }
+
+    if (nextSession.isFinal) {
+      setCardTerminalLoading(false);
+      clearCardTerminalPoll();
+      if (sale) {
+        await loadSale(sale.sale.id);
+      }
+      if (nextSession.status !== "CANCELED") {
+        error(getCardTerminalStatusLabel(nextSession) ?? "Card terminal payment did not complete.");
+      }
+      return true;
+    }
+
+    setCardTerminalLoading(false);
+    return false;
+  };
+
+  const pollCardTerminalSession = (sessionId: string) => {
+    clearCardTerminalPoll();
+
+    const poll = async () => {
+      try {
+        const payload = await apiGet<CardTerminalSessionResponse>(
+          `/api/payments/terminal-sessions/${encodeURIComponent(sessionId)}`,
+        );
+        const finished = await handleCardTerminalSessionResult(payload);
+        if (!finished) {
+          cardTerminalPollTimeoutRef.current = window.setTimeout(poll, CARD_TERMINAL_POLL_MS);
+        }
+      } catch (terminalError) {
+        const message = terminalError instanceof Error ? terminalError.message : "Card terminal status refresh failed";
+        setCardTerminalLoading(false);
+        setCardTerminalMessage(message);
+        error(message);
+      }
+    };
+
+    cardTerminalPollTimeoutRef.current = window.setTimeout(poll, CARD_TERMINAL_POLL_MS);
+  };
+
+  const startMockCardTerminalPayment = () => {
+    if (!sale) {
+      error("No sale to send to the card terminal.");
+      return;
+    }
+    if (payablePence <= 0) {
+      success("Card payment is already covered.");
+      return;
+    }
+
+    clearCardTerminalPoll();
+    setCardTerminalSession(null);
+    setCardTerminalLoading(false);
+    const terminalLabel = getCardTerminalRouteLabel(selectedCardTerminalRouteId, cardTerminals, cardTerminalConfig);
+    setCardTerminalMessage(`Waiting for the customer on ${terminalLabel}.`);
+    setMockCardTerminalState({
+      status: "PENDING",
+      amountPence: payablePence,
+      tillPointId: posWorkstationState.tillPointId ?? "TILL_1",
+      terminalRouteId: selectedCardTerminalRouteId,
+      terminalLabel,
+      reference: createMockCardTerminalReference(),
+      message: `${terminalLabel} is waiting for customer tap, insert, or PIN entry.`,
+      requestedAt: new Date().toISOString(),
+      completedAt: null,
+    });
+    success(`Demo payment sent to ${terminalLabel}.`);
+  };
+
+  const approveMockCardTerminalPayment = () => {
+    if (!mockCardTerminalState || mockCardTerminalState.status !== "PENDING") {
+      return;
+    }
+
+    setCardTerminalMessage("Demo card payment approved.");
+    setMockCardTerminalState({
+      ...mockCardTerminalState,
+      status: "APPROVED",
+      message: `Approved on ${mockCardTerminalState.terminalLabel}.`,
+      completedAt: new Date().toISOString(),
+    });
+    success("Demo card payment approved.");
+  };
+
+  const declineMockCardTerminalPayment = () => {
+    if (!mockCardTerminalState || mockCardTerminalState.status !== "PENDING") {
+      return;
+    }
+
+    setCardTerminalMessage("Demo card payment declined.");
+    setMockCardTerminalState({
+      ...mockCardTerminalState,
+      status: "DECLINED",
+      message: `Declined on ${mockCardTerminalState.terminalLabel}.`,
+      completedAt: new Date().toISOString(),
+    });
+    error("Demo card payment declined.");
+  };
+
+  const cancelMockCardTerminalPayment = () => {
+    if (!mockCardTerminalState || mockCardTerminalState.status !== "PENDING") {
+      return;
+    }
+
+    setMockCardTerminalState(null);
+    setCardTerminalMessage(null);
+  };
+
+  const startCardTerminalPayment = async () => {
+    if (!sale) {
+      error("No sale to send to the card terminal.");
+      return;
+    }
+    if (payablePence <= 0) {
+      success("Card payment is already covered.");
+      return;
+    }
+    if (!cardTerminalConfig?.enabled || !cardTerminalConfig.configured) {
+      startMockCardTerminalPayment();
+      return;
+    }
+
+    const terminalId = routedCardTerminalProviderId || cardTerminalConfig.defaultTerminalId || "";
+
+    if (!terminalId) {
+      error("Select a card terminal before taking payment.");
+      return;
+    }
+
+    setCardTerminalLoading(true);
+    setCardTerminalMessage(null);
+    clearCardTerminalPoll();
+
+    try {
+      const payload = await apiPost<CardTerminalSessionResponse>("/api/payments/terminal-sessions", {
+        saleId: sale.sale.id,
+        amountPence: payablePence,
+        terminalId,
+      });
+      const finished = await handleCardTerminalSessionResult(payload);
+      if (!finished) {
+        success("Payment sent to card terminal.");
+        pollCardTerminalSession(payload.session.id);
+      }
+    } catch (terminalError) {
+      const message = terminalError instanceof Error ? terminalError.message : "Card terminal payment failed to start";
+      setCardTerminalLoading(false);
+      setCardTerminalMessage(message);
+      error(message);
+    }
+  };
+
+  const cancelCardTerminalPayment = async () => {
+    if (!cardTerminalSession || cardTerminalSession.isFinal) {
+      return;
+    }
+
+    setCardTerminalLoading(true);
+    try {
+      const payload = await apiPost<CardTerminalSessionResponse>(
+        `/api/payments/terminal-sessions/${encodeURIComponent(cardTerminalSession.id)}/cancel`,
+        {},
+      );
+      clearCardTerminalPoll();
+      await handleCardTerminalSessionResult(payload);
+    } catch (terminalError) {
+      const message = terminalError instanceof Error ? terminalError.message : "Card terminal cancellation failed";
+      setCardTerminalMessage(message);
+      error(message);
+    } finally {
+      setCardTerminalLoading(false);
+    }
+  };
+
+  const respondToCardTerminalSignature = async (accepted: boolean) => {
+    if (!cardTerminalSession || cardTerminalSession.isFinal) {
+      return;
+    }
+
+    setCardTerminalLoading(true);
+    try {
+      const payload = await apiPost<CardTerminalSessionResponse>(
+        `/api/payments/terminal-sessions/${encodeURIComponent(cardTerminalSession.id)}/signature`,
+        { accepted },
+      );
+      const finished = await handleCardTerminalSessionResult(payload);
+      if (!finished) {
+        pollCardTerminalSession(payload.session.id);
+      }
+    } catch (signatureError) {
+      const message = signatureError instanceof Error ? signatureError.message : "Signature response failed";
+      setCardTerminalMessage(message);
+      error(message);
+    } finally {
+      setCardTerminalLoading(false);
+    }
+  };
+
   const returnSaleToBasket = async () => {
     if (!sale) {
       error("No live sale to return.");
@@ -1659,6 +2233,8 @@ export const PosPage = () => {
       setContextCustomerId(payload.customer?.id ?? null);
       setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
+      setMockCardTerminalState(null);
+      setCardTerminalMessage(null);
       localStorage.removeItem(ACTIVE_SALE_KEY);
       persistActiveBasketId(payload.id);
       syncQuery({ basketId: payload.id, saleId: null });
@@ -1696,8 +2272,19 @@ export const PosPage = () => {
         if (selectedTenderMethod === "STORE_CREDIT") {
           await applyStoreCreditTender(payablePence);
         } else if (selectedTenderMethod === "CARD") {
-          error("Confirm card payment before completing the sale.");
-          return;
+          if (
+            selectedCardPaymentMode === "TERMINAL"
+            && mockCardTerminalState?.status === "APPROVED"
+            && mockCardTerminalState.amountPence >= payablePence
+          ) {
+            await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
+              method: "CARD",
+              amountPence: payablePence,
+            });
+          } else {
+            error("Confirm card payment before completing the sale.");
+            return;
+          }
         } else if (isSaleTenderMethod(selectedTenderMethod)) {
           await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
             method: selectedTenderMethod,
@@ -1883,10 +2470,86 @@ export const PosPage = () => {
     && !storeCreditCustomer?.phone
       ? "Attach a customer before using store credit."
       : null;
+  const hasConfiguredCardTerminal = cardTerminalConfigured;
+  const hasActiveCardTerminalSession = Boolean(cardTerminalSession && !cardTerminalSession.isFinal);
+  const hasPendingMockCardTerminalSession = mockCardTerminalState?.status === "PENDING";
+  const hasApprovedMockCardTerminalSession = mockCardTerminalState?.status === "APPROVED";
+  const hasDeclinedMockCardTerminalSession = mockCardTerminalState?.status === "DECLINED";
+  const hasInProgressCardTerminalSession = hasActiveCardTerminalSession || hasPendingMockCardTerminalSession;
+  const selectedCardTerminal = cardTerminals.find((terminal) =>
+    terminal.terminalId === routedCardTerminalProviderId || terminal.id === routedCardTerminalProviderId,
+  );
+  const selectedCardTerminalRouteLabel =
+    mockCardTerminalState?.terminalLabel
+    ?? getCardTerminalRouteLabel(selectedCardTerminalRouteId, cardTerminals, cardTerminalConfig);
+  const posWorkstationConfigured = Boolean(selectedTillPoint);
+  const suggestedTillPoint = suggestedTillPointId ? getPosTillPoint(suggestedTillPointId) : null;
+  const posWorkstationTillLabel = selectedTillPoint?.label ?? "Till point not set";
+  const posWorkstationTerminalLabel = selectedCardTerminalRouteLabel;
+  const cardTerminalRouteOverrideActive =
+    posWorkstationState.terminalRouteOverride && selectedCardTerminalRouteId !== defaultCardTerminalRouteId;
+  const cardTerminalStatusLabel = cardTerminalMessage ?? getCardTerminalStatusLabel(cardTerminalSession);
+  const cardTerminalTrafficState: CardTerminalTrafficState = hasPendingMockCardTerminalSession || hasActiveCardTerminalSession
+    ? "pending"
+    : hasApprovedMockCardTerminalSession || cardTerminalSession?.status === "CAPTURED"
+      ? "approved"
+      : hasDeclinedMockCardTerminalSession
+        || cardTerminalSession?.status === "DECLINED"
+        || cardTerminalSession?.status === "FAILED"
+        || cardTerminalSession?.status === "CANCELED"
+        || cardTerminalSession?.status === "EXPIRED"
+          ? "declined"
+          : "idle";
+  const cardTerminalRouteStatusLabel =
+    cardTerminalTrafficState === "pending"
+      ? `Sent to ${selectedCardTerminalRouteLabel}`
+      : cardTerminalTrafficState === "approved"
+        ? `Approved on ${selectedCardTerminalRouteLabel}`
+        : cardTerminalTrafficState === "declined"
+          ? `Declined on ${selectedCardTerminalRouteLabel}`
+          : `Sending to ${selectedCardTerminalRouteLabel}`;
+  const cardTerminalTrafficLabel =
+    cardTerminalTrafficState === "pending"
+      ? "Amber"
+      : cardTerminalTrafficState === "approved"
+        ? "Green"
+        : cardTerminalTrafficState === "declined"
+          ? "Red"
+          : "Ready";
+  const cardTerminalTrafficTitle =
+    cardTerminalTrafficState === "pending"
+      ? "Waiting for card machine"
+      : cardTerminalTrafficState === "approved"
+        ? "Approved"
+        : cardTerminalTrafficState === "declined"
+          ? "Declined"
+          : hasConfiguredCardTerminal
+            ? "Ready to send"
+            : "Demo terminal ready";
+  const cardTerminalTrafficMessage = cardTerminalTrafficState === "idle"
+    ? null
+    : mockCardTerminalState?.message
+      ?? cardTerminalStatusLabel
+      ?? (hasConfiguredCardTerminal ? "Waiting for the paired terminal." : null);
+  const cardTerminalDisplayAmountPence =
+    mockCardTerminalState?.amountPence
+    ?? cardTerminalSession?.amountPence
+    ?? payablePence;
+  const cardTerminalDisplaySetupLabel = hasConfiguredCardTerminal ? getCardTerminalSetupLabel(cardTerminalConfig) : "Demo mode";
   const cardValidationMessage =
-    selectedTenderMethod === "CARD" && payablePence > 0
-      ? "Confirm card approval before completing the sale."
-      : null;
+    selectedTenderMethod !== "CARD" || payablePence <= 0
+      ? null
+      : hasInProgressCardTerminalSession
+        ? "Card terminal payment is still in progress."
+        : hasApprovedMockCardTerminalSession
+          ? null
+          : hasDeclinedMockCardTerminalSession
+            ? "Card payment was declined. Try again or choose another tender."
+        : selectedCardPaymentMode === "TERMINAL"
+          ? hasConfiguredCardTerminal
+            ? "Send card payment to the terminal before completing the sale."
+            : "Send card payment to the demo terminal or choose manual approval."
+          : "Confirm card approval before completing the sale.";
   const tenderValidationMessage = cashValidationMessage ?? storeCreditValidationMessage ?? cardValidationMessage;
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const canReturnSaleToBasket = Boolean(
@@ -2508,6 +3171,39 @@ export const PosPage = () => {
 
             </section>
 
+            <section className={`pos-panel pos-workstation-panel${posWorkstationConfigured ? "" : " pos-workstation-panel--warning"}`}>
+              <div className="pos-panel-heading">
+                <div>
+                  <div className="pos-section-kicker">Workstation</div>
+                </div>
+                <Link className="button-link pos-workstation-setup-link" to="/settings/pos#till-workstation-setup">
+                  Setup
+                </Link>
+              </div>
+
+              <div className="pos-workstation-summary">
+                <div>
+                  <span>Till point</span>
+                  <strong>{posWorkstationTillLabel}</strong>
+                </div>
+                <div>
+                  <span>Card terminal</span>
+                  <strong>{posWorkstationTerminalLabel}</strong>
+                </div>
+              </div>
+
+              {!posWorkstationConfigured ? (
+                <div className="pos-workstation-warning">
+                  <p>Set the till point for this browser before live card use.</p>
+                  {suggestedTillPoint ? (
+                    <button type="button" onClick={() => chooseTillPoint(suggestedTillPoint.id)}>
+                      Use {suggestedTillPoint.label}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+
             {showBasketPanel ? (
               <section className="pos-panel pos-basket-panel">
                 <div className="pos-panel-heading">
@@ -2596,7 +3292,14 @@ export const PosPage = () => {
                       type="button"
                       className="secondary pos-return-basket-button"
                       onClick={() => void returnSaleToBasket()}
-                      disabled={!canReturnSaleToBasket || completing || confirmingCardPayment || returningToBasket}
+                      disabled={
+                        !canReturnSaleToBasket
+                        || completing
+                        || confirmingCardPayment
+                        || cardTerminalLoading
+                        || hasInProgressCardTerminalSession
+                        || returningToBasket
+                      }
                       title={canReturnSaleToBasket ? "Return this unpaid sale to basket editing" : "Cannot return after payment activity"}
                     >
                       {returningToBasket ? "Returning..." : "Back to basket"}
@@ -2701,7 +3404,7 @@ export const PosPage = () => {
                         type="button"
                         className={selectedTenderMethod === method ? "primary" : ""}
                         onClick={() => chooseTenderMethod(method)}
-                        disabled={completing || confirmingCardPayment}
+                        disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
                         aria-label={getTenderMethodLabel(method)}
                         title={getTenderMethodLabel(method)}
                       >
@@ -2712,25 +3415,241 @@ export const PosPage = () => {
 
                   {selectedTenderMethod === "CARD" ? (
                     <div className="quick-create-panel pos-card-panel">
-                      <div>
-                        <strong>Manual card approval</strong>
-                        <p className="muted-text">
-                          Confirm the card machine has approved {formatMoney(payablePence)} before completing this sale.
-                        </p>
+                      <div className="actions-inline pos-card-mode-switch" role="group" aria-label="Card payment mode">
+                        <button
+                          type="button"
+                          className={selectedCardPaymentMode === "TERMINAL" ? "primary" : ""}
+                          onClick={() => chooseCardPaymentMode("TERMINAL")}
+                          disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                        >
+                          Send to terminal
+                        </button>
+                        <button
+                          type="button"
+                          className={selectedCardPaymentMode === "MANUAL" ? "primary" : ""}
+                          onClick={() => chooseCardPaymentMode("MANUAL")}
+                          disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                        >
+                          Manual approval
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="primary"
-                        data-testid="pos-confirm-card-payment"
-                        onClick={() => void confirmManualCardPayment()}
-                        disabled={payablePence <= 0 || completing || confirmingCardPayment}
-                      >
-                        {payablePence <= 0
-                          ? "Card confirmed"
-                          : confirmingCardPayment
-                            ? "Confirming..."
-                            : "Confirm card approved"}
-                      </button>
+
+                      {selectedCardPaymentMode === "TERMINAL" ? (
+                        <div className={`pos-card-terminal-card${hasConfiguredCardTerminal ? " pos-card-terminal-card--ready" : " pos-card-terminal-card--pending"}`}>
+                          <div className="pos-card-terminal-card__header">
+                            <div className="pos-card-terminal-card__copy">
+                              <span className="pos-card-terminal-pill">{cardTerminalDisplaySetupLabel}</span>
+                            </div>
+                            <div className="pos-card-terminal-amount">
+                              <span>Amount</span>
+                              <strong>{formatMoney(cardTerminalDisplayAmountPence)}</strong>
+                            </div>
+                          </div>
+
+                          <div className={`pos-card-terminal-route${posWorkstationConfigured ? "" : " pos-card-terminal-route--warning"}`}>
+                            <div className="pos-card-terminal-route__copy">
+                              <span>{posWorkstationTillLabel}</span>
+                              <strong>{cardTerminalRouteStatusLabel}</strong>
+                              {!posWorkstationConfigured ? (
+                                <em>Till point setup needed</em>
+                              ) : cardTerminalRouteOverrideActive ? (
+                                <em>Custom terminal route</em>
+                              ) : null}
+                            </div>
+                            <Link className="button-link" to="/settings/pos#till-workstation-setup">
+                              Setup
+                            </Link>
+                          </div>
+
+                          <div
+                            className={`pos-card-terminal-traffic pos-card-terminal-traffic--${cardTerminalTrafficState}`}
+                            data-testid="pos-card-terminal-traffic"
+                          >
+                            <div className="pos-card-terminal-signal" aria-hidden="true">
+                              {cardTerminalTrafficState === "pending" ? (
+                                <span className="pos-card-terminal-spinner" />
+                              ) : (
+                                <span className="pos-card-terminal-light" />
+                              )}
+                            </div>
+                            <div className="pos-card-terminal-traffic__copy">
+                              <span>{cardTerminalTrafficLabel}</span>
+                              <strong>{cardTerminalTrafficTitle}</strong>
+                              {cardTerminalTrafficMessage ? <p>{cardTerminalTrafficMessage}</p> : null}
+                            </div>
+                          </div>
+
+                          {hasConfiguredCardTerminal ? (
+                            <div className="pos-card-terminal-controls">
+                              {cardTerminals.length === 0 && cardTerminalConfig?.defaultTerminalId ? (
+                                <p className="muted-text">
+                                  Terminal: {cardTerminalConfig.defaultTerminalId}
+                                </p>
+                              ) : null}
+
+                              <div className="actions-inline pos-card-terminal-actions">
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  data-testid="pos-send-card-terminal-payment"
+                                  onClick={() => void startCardTerminalPayment()}
+                                  disabled={
+                                    payablePence <= 0
+                                    || completing
+                                    || confirmingCardPayment
+                                    || cardTerminalLoading
+                                    || hasInProgressCardTerminalSession
+                                    || !routedCardTerminalProviderId
+                                  }
+                                >
+                                  {hasInProgressCardTerminalSession
+                                    ? "Waiting..."
+                                    : cardTerminalLoading
+                                      ? "Starting..."
+                                      : payablePence <= 0
+                                        ? "Card captured"
+                                        : "Send to terminal"}
+                                </button>
+                                {cardTerminalSession && !cardTerminalSession.isFinal ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void cancelCardTerminalPayment()}
+                                    disabled={cardTerminalLoading || completing}
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              {cardTerminalSession?.status === "SIGNATURE_VERIFICATION_REQUIRED" ? (
+                                <div className="actions-inline pos-card-terminal-actions">
+                                  <button
+                                    type="button"
+                                    className="primary"
+                                    onClick={() => void respondToCardTerminalSignature(true)}
+                                    disabled={cardTerminalLoading}
+                                  >
+                                    Accept signature
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void respondToCardTerminalSignature(false)}
+                                    disabled={cardTerminalLoading}
+                                  >
+                                    Decline signature
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              {cardTerminalStatusLabel ? (
+                                <p className="muted-text pos-card-terminal-status">
+                                  {selectedCardTerminal ? `${selectedCardTerminal.name}: ` : ""}
+                                  {cardTerminalStatusLabel}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="pos-card-terminal-controls">
+                              <div className="actions-inline pos-card-terminal-actions">
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  data-testid="pos-send-card-terminal-payment"
+                                  onClick={() => void startCardTerminalPayment()}
+                                  disabled={
+                                    payablePence <= 0
+                                    || completing
+                                    || confirmingCardPayment
+                                    || hasPendingMockCardTerminalSession
+                                    || hasApprovedMockCardTerminalSession
+                                  }
+                                >
+                                  {hasPendingMockCardTerminalSession
+                                    ? "Payment sent"
+                                    : hasApprovedMockCardTerminalSession
+                                      ? "Approved"
+                                      : "Send to terminal"}
+                                </button>
+                                {hasPendingMockCardTerminalSession ? (
+                                  <button
+                                    type="button"
+                                    onClick={cancelMockCardTerminalPayment}
+                                    disabled={completing}
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              {hasPendingMockCardTerminalSession ? (
+                                <div className="actions-inline pos-card-terminal-outcomes" role="group" aria-label="Demo card outcome">
+                                  <button
+                                    type="button"
+                                    className="pos-card-terminal-approve"
+                                    data-testid="pos-mock-card-approved"
+                                    onClick={approveMockCardTerminalPayment}
+                                  >
+                                    Simulate approved
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="pos-card-terminal-decline"
+                                    data-testid="pos-mock-card-declined"
+                                    onClick={declineMockCardTerminalPayment}
+                                  >
+                                    Simulate declined
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              {hasDeclinedMockCardTerminalSession ? (
+                                <div className="actions-inline pos-card-terminal-actions">
+                                  <button type="button" onClick={startMockCardTerminalPayment}>
+                                    Try again
+                                  </button>
+                                  <button type="button" onClick={() => chooseCardPaymentMode("MANUAL")}>
+                                    Manual approval
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              {hasApprovedMockCardTerminalSession ? (
+                                <p className="muted-text pos-card-terminal-status">
+                                  Auth {mockCardTerminalState.reference}. Complete sale when ready.
+                                </p>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pos-card-manual-fallback">
+                        <div>
+                          <strong>Manual approval</strong>
+                          <p className="muted-text">
+                            Confirm the card machine has approved {formatMoney(payablePence)}.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="pos-confirm-card-payment"
+                          onClick={() => void confirmManualCardPayment()}
+                          disabled={
+                            payablePence <= 0
+                            || completing
+                            || confirmingCardPayment
+                            || cardTerminalLoading
+                            || hasInProgressCardTerminalSession
+                          }
+                        >
+                          {payablePence <= 0
+                            ? "Card confirmed"
+                            : confirmingCardPayment
+                              ? "Confirming..."
+                              : "Confirm approved"}
+                        </button>
+                        </div>
+                      )}
                     </div>
                   ) : null}
 
@@ -2804,7 +3723,13 @@ export const PosPage = () => {
                     className="primary"
                     data-testid="pos-complete-sale"
                     onClick={completeSale}
-                    disabled={completing || confirmingCardPayment || Boolean(tenderValidationMessage)}
+                    disabled={
+                      completing
+                      || confirmingCardPayment
+                      || cardTerminalLoading
+                      || hasInProgressCardTerminalSession
+                      || Boolean(tenderValidationMessage)
+                    }
                   >
                     {completing ? "Completing..." : "Complete Sale"}
                   </button>
