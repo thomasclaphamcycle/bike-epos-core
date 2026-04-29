@@ -54,6 +54,8 @@ export type AppConfig = {
     quickAddProducts: Array<{
       label: string;
       query: string;
+      type?: "INVENTORY" | "SERVICE_TEMPLATE";
+      refId?: string;
     }>;
     duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
     enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;

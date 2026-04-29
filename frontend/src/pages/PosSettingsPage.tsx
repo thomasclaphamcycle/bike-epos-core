@@ -1,10 +1,50 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPatch } from "../api/client";
 import { useToasts } from "../components/ToastProvider";
 import { PageHeader } from "../components/ui/PageHeader";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { SurfaceCard } from "../components/ui/SurfaceCard";
 import { invalidateAppConfigCache } from "../config/appConfig";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
+import {
+  type WorkshopServiceTemplate,
+  type WorkshopServiceTemplatesResponse,
+} from "../features/workshop/serviceTemplates";
+
+type QuickAddProductSetting = {
+  label: string;
+  query: string;
+  type?: "INVENTORY" | "SERVICE_TEMPLATE";
+  refId?: string;
+};
+
+type ProductSearchRow = {
+  id: string;
+  productId?: string;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  pricePence: number;
+  onHandQty: number;
+};
+
+type QuickAddSearchResult =
+  | {
+      key: string;
+      type: "INVENTORY";
+      label: string;
+      detail: string;
+      pricePence: number;
+      entry: QuickAddProductSetting;
+    }
+  | {
+      key: string;
+      type: "SERVICE_TEMPLATE";
+      label: string;
+      detail: string;
+      pricePence: number;
+      entry: QuickAddProductSetting;
+    };
 
 type PosSettings = {
   defaultTaxRatePercent: number;
@@ -24,10 +64,7 @@ type PosSettings = {
   requireLineNotes: boolean;
   scanQuantityMode: "INCREMENT_ONE" | "PROMPT_QUANTITY" | "USE_TYPED_QUANTITY";
   quickAddEnabled: boolean;
-  quickAddProducts: Array<{
-    label: string;
-    query: string;
-  }>;
+  quickAddProducts: QuickAddProductSetting[];
   duplicateScanBehavior: "INCREMENT_QUANTITY" | "ADD_SEPARATE_LINE" | "PROMPT";
   enabledTenderMethods: Array<"CASH" | "CARD" | "BANK_TRANSFER" | "VOUCHER" | "STORE_CREDIT">;
   splitPaymentsEnabled: boolean;
@@ -115,6 +152,18 @@ const formatTenderSummary = (methods: PosSettings["enabledTenderMethods"]) =>
     .map((option) => option.label)
     .join(", ");
 
+const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
+
+const getTemplateRequiredLineTotal = (template: WorkshopServiceTemplate) =>
+  template.lines
+    .filter((line) => !line.isOptional)
+    .reduce((sum, line) => sum + line.lineTotalPence, 0);
+
+const getQuickAddEntryKey = (entry: QuickAddProductSetting) =>
+  `${entry.type ?? "INVENTORY"}:${entry.refId ?? entry.query.trim().toLowerCase()}`;
+
+const normalizeSearchText = (value: string) => value.trim().toLowerCase();
+
 type ToggleSettingProps = {
   checked: boolean;
   description?: string;
@@ -142,6 +191,12 @@ export const PosSettingsPage = () => {
   const [savedSettings, setSavedSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [quickAddSearchText, setQuickAddSearchText] = useState("");
+  const debouncedQuickAddSearchText = useDebouncedValue(quickAddSearchText, 250);
+  const [inventoryResults, setInventoryResults] = useState<ProductSearchRow[]>([]);
+  const [serviceTemplates, setServiceTemplates] = useState<WorkshopServiceTemplate[]>([]);
+  const [quickAddSearchLoading, setQuickAddSearchLoading] = useState(false);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
 
   const isDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings);
 
@@ -194,19 +249,20 @@ export const PosSettingsPage = () => {
     }));
   };
 
-  const addQuickAddProduct = () => {
+  const addQuickAddProduct = (entry: QuickAddProductSetting) => {
     setSettings((current) => {
       if (current.quickAddProducts.length >= 12) {
         error("Quick-add products are limited to 12 buttons.");
         return current;
       }
+      if (current.quickAddProducts.some((existing) => getQuickAddEntryKey(existing) === getQuickAddEntryKey(entry))) {
+        error("That quick-add button is already configured.");
+        return current;
+      }
 
       return {
         ...current,
-        quickAddProducts: [
-          ...current.quickAddProducts,
-          { label: "New quick add", query: "New quick add" },
-        ],
+        quickAddProducts: [...current.quickAddProducts, entry],
       };
     });
   };
@@ -236,6 +292,125 @@ export const PosSettingsPage = () => {
     void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTemplates = async () => {
+      setTemplatesLoading(true);
+      try {
+        const payload = await apiGet<WorkshopServiceTemplatesResponse>("/api/workshop/service-templates");
+        if (!cancelled) {
+          setServiceTemplates(payload.templates || []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          error(loadError instanceof Error ? loadError.message : "Failed to load service templates");
+        }
+      } finally {
+        if (!cancelled) {
+          setTemplatesLoading(false);
+        }
+      }
+    };
+
+    void loadTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error]);
+
+  useEffect(() => {
+    const query = debouncedQuickAddSearchText.trim();
+    if (!query) {
+      setInventoryResults([]);
+      setQuickAddSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const searchInventory = async () => {
+      setQuickAddSearchLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set("q", query);
+        params.set("take", "8");
+        const payload = await apiGet<{ rows: ProductSearchRow[] }>(`/api/products/search?${params.toString()}`);
+        if (!cancelled) {
+          setInventoryResults(payload.rows || []);
+        }
+      } catch (searchError) {
+        if (!cancelled) {
+          error(searchError instanceof Error ? searchError.message : "Failed to search inventory");
+          setInventoryResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setQuickAddSearchLoading(false);
+        }
+      }
+    };
+
+    void searchInventory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuickAddSearchText, error]);
+
+  const quickAddSearchResults = useMemo<QuickAddSearchResult[]>(() => {
+    const query = normalizeSearchText(debouncedQuickAddSearchText);
+    if (!query) {
+      return [];
+    }
+
+    const inventory: QuickAddSearchResult[] = inventoryResults.map((row) => ({
+      key: `inventory-${row.id}`,
+      type: "INVENTORY",
+      label: row.name,
+      detail: [row.sku, row.barcode ? `Barcode ${row.barcode}` : null, `${row.onHandQty} on hand`]
+        .filter(Boolean)
+        .join(" · "),
+      pricePence: row.pricePence,
+      entry: {
+        label: row.name,
+        query: row.sku || row.barcode || row.name,
+        type: "INVENTORY",
+        refId: row.id,
+      },
+    }));
+
+    const templates: QuickAddSearchResult[] = serviceTemplates
+      .filter((template) => (
+        normalizeSearchText([
+          template.name,
+          template.category ?? "",
+          template.description ?? "",
+        ].join(" ")).includes(query)
+      ))
+      .slice(0, 8)
+      .map((template) => ({
+        key: `template-${template.id}`,
+        type: "SERVICE_TEMPLATE",
+        label: template.name,
+        detail: [
+          template.category ?? "Service template",
+          `${template.lineCount} line${template.lineCount === 1 ? "" : "s"}`,
+          template.pricingMode === "FIXED_PRICE_SERVICE" ? "Fixed price" : "Standard",
+        ].join(" · "),
+        pricePence: template.targetTotalPricePence ?? getTemplateRequiredLineTotal(template),
+        entry: {
+          label: template.name,
+          query: template.name,
+          type: "SERVICE_TEMPLATE",
+          refId: template.id,
+        },
+      }));
+
+    return [...inventory, ...templates];
+  }, [debouncedQuickAddSearchText, inventoryResults, serviceTemplates]);
 
   const saveSettings = async (event: FormEvent) => {
     event.preventDefault();
@@ -526,7 +701,7 @@ export const PosSettingsPage = () => {
           <SectionHeader
             eyebrow="Quick add"
             title="Choose the POS quick-add buttons"
-            description="Set the button label staff see and the product lookup text CorePOS uses to find the matching SKU, barcode, or product name."
+            description="Search inventory and workshop service templates, then choose the buttons staff see on POS."
           />
           <div className="pos-quick-add-settings-panel">
             <ToggleSetting
@@ -535,6 +710,58 @@ export const PosSettingsPage = () => {
               description="When enabled, these buttons appear under the search box for fast one-tap product entry."
               onChange={(checked) => updateSetting("quickAddEnabled", checked)}
             />
+
+            <div className="pos-quick-add-search">
+              <label>
+                Search inventory and service templates
+                <input
+                  value={quickAddSearchText}
+                  placeholder="Search by product, SKU, barcode, or service"
+                  onChange={(event) => setQuickAddSearchText(event.target.value)}
+                />
+              </label>
+              <div className="pos-quick-add-search-results" aria-live="polite">
+                {quickAddSearchText.trim() ? (
+                  quickAddSearchResults.length > 0 ? (
+                    quickAddSearchResults.map((result) => {
+                      const alreadyAdded = settings.quickAddProducts.some((entry) =>
+                        getQuickAddEntryKey(entry) === getQuickAddEntryKey(result.entry),
+                      );
+
+                      return (
+                        <div className="pos-quick-add-search-result" key={result.key}>
+                          <div>
+                            <span className="pos-quick-add-result-type">
+                              {result.type === "SERVICE_TEMPLATE" ? "Service" : "Inventory"}
+                            </span>
+                            <strong>{result.label}</strong>
+                            <span className="pos-settings-field-note">{result.detail}</span>
+                          </div>
+                          <span className="pos-quick-add-result-price">{formatMoney(result.pricePence)}</span>
+                          <button
+                            type="button"
+                            onClick={() => addQuickAddProduct(result.entry)}
+                            disabled={alreadyAdded || settings.quickAddProducts.length >= 12}
+                          >
+                            {alreadyAdded ? "Added" : "Add"}
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="empty-state compact">
+                      {quickAddSearchLoading || templatesLoading
+                        ? "Searching..."
+                        : "No inventory items or service templates matched that search."}
+                    </div>
+                  )
+                ) : (
+                  <div className="empty-state compact">
+                    Search to add stock items, SKUs, barcodes, or service templates.
+                  </div>
+                )}
+              </div>
+            </div>
 
             <div className="pos-quick-add-settings-list">
               {settings.quickAddProducts.length > 0 ? (
@@ -550,15 +777,17 @@ export const PosSettingsPage = () => {
                       />
                     </label>
                     <label>
-                      Product lookup
+                      {entry.type === "SERVICE_TEMPLATE" ? "Service template" : "Product lookup"}
                       <input
                         maxLength={120}
                         value={entry.query}
-                        placeholder="Name, SKU, or barcode"
+                        placeholder={entry.type === "SERVICE_TEMPLATE" ? "Template name" : "Name, SKU, or barcode"}
                         onChange={(event) => updateQuickAddProduct(index, "query", event.target.value)}
                       />
                       <span className="pos-settings-field-note">
-                        POS uses this to search products and picks the best match.
+                        {entry.type === "SERVICE_TEMPLATE"
+                          ? "POS applies the required lines from this service template."
+                          : "POS uses this to search products and picks the best match."}
                       </span>
                     </label>
                     <button
@@ -576,16 +805,6 @@ export const PosSettingsPage = () => {
                   No quick-add buttons are configured. Add one to make it appear on POS.
                 </div>
               )}
-            </div>
-
-            <div className="actions-inline pos-settings-actions">
-              <button
-                type="button"
-                onClick={addQuickAddProduct}
-                disabled={settings.quickAddProducts.length >= 12}
-              >
-                Add quick-add product
-              </button>
             </div>
           </div>
         </SurfaceCard>

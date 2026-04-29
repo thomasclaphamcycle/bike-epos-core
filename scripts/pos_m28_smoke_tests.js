@@ -64,6 +64,7 @@ const cleanup = async (state) => {
   const basketIds = Array.from(state.basketIds);
   const variantIds = Array.from(state.variantIds);
   const productIds = Array.from(state.productIds);
+  const templateIds = Array.from(state.templateIds);
   const customerIds = Array.from(state.customerIds);
   const userIds = Array.from(state.userIds);
 
@@ -141,6 +142,23 @@ const cleanup = async (state) => {
     });
   }
 
+  if (templateIds.length > 0) {
+    await prisma.workshopServiceTemplateLine.deleteMany({
+      where: {
+        templateId: {
+          in: templateIds,
+        },
+      },
+    });
+    await prisma.workshopServiceTemplate.deleteMany({
+      where: {
+        id: {
+          in: templateIds,
+        },
+      },
+    });
+  }
+
   if (variantIds.length > 0) {
     await prisma.stockLedgerEntry.deleteMany({
       where: {
@@ -212,6 +230,7 @@ const run = async () => {
     basketIds: new Set(),
     variantIds: new Set(),
     productIds: new Set(),
+    templateIds: new Set(),
     customerIds: new Set(),
     userIds: new Set(),
   };
@@ -372,6 +391,107 @@ const run = async () => {
     assert.equal(detachCustomerRes.json.customer, null);
     assert.equal(detachCustomerRes.json.items.length, 1);
     assert.equal(detachCustomerRes.json.items[0].quantity, 3);
+
+    const serviceTemplate = await prisma.workshopServiceTemplate.create({
+      data: {
+        name: `M28 POS Service ${uniqueRef()}`,
+        description: "Service template used by POS quick add smoke coverage",
+        pricingMode: "STANDARD_SERVICE",
+        isActive: true,
+        lines: {
+          create: [
+            {
+              type: "LABOUR",
+              description: "Safety check labour",
+              qty: 1,
+              unitPricePence: 2500,
+              sortOrder: 0,
+            },
+            {
+              type: "PART",
+              productId: productRes.json.id,
+              variantId: variantRes.json.id,
+              description: "Template part",
+              qty: 1,
+              unitPricePence: 899,
+              sortOrder: 1,
+            },
+          ],
+        },
+      },
+    });
+    state.templateIds.add(serviceTemplate.id);
+
+    const templateBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(templateBasketRes.status, 201, JSON.stringify(templateBasketRes.json));
+    state.basketIds.add(templateBasketRes.json.id);
+
+    const addTemplateRes = await fetchJson(`/api/baskets/${templateBasketRes.json.id}/service-templates`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        templateId: serviceTemplate.id,
+      }),
+    });
+    assert.equal(addTemplateRes.status, 201, JSON.stringify(addTemplateRes.json));
+    assert.equal(addTemplateRes.json.items.length, 2);
+    assert.equal(addTemplateRes.json.totals.totalPence, 3399);
+    const templateLabourItem = addTemplateRes.json.items.find((item) => item.type === "LABOUR");
+    assert.ok(templateLabourItem);
+    assert.equal(templateLabourItem.productName, serviceTemplate.name);
+    assert.ok(addTemplateRes.json.items.some((item) => item.variantId === variantRes.json.id));
+    const templateLabourVariant = await prisma.variant.findUnique({
+      where: { id: templateLabourItem.variantId },
+      select: { id: true, productId: true },
+    });
+    if (templateLabourVariant) {
+      state.variantIds.add(templateLabourVariant.id);
+      state.productIds.add(templateLabourVariant.productId);
+    }
+
+    const reopenBasketRes = await fetchJson("/api/baskets", {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({
+        items: [
+          {
+            variantId: variantRes.json.id,
+            quantity: 1,
+            unitPricePence: 899,
+          },
+        ],
+      }),
+    });
+    assert.equal(reopenBasketRes.status, 201, JSON.stringify(reopenBasketRes.json));
+    state.basketIds.add(reopenBasketRes.json.id);
+
+    const unpaidCheckoutRes = await fetchJson(`/api/baskets/${reopenBasketRes.json.id}/checkout`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(unpaidCheckoutRes.status, 201, JSON.stringify(unpaidCheckoutRes.json));
+    const unpaidSaleId = unpaidCheckoutRes.json.sale.id;
+
+    const reopenRes = await fetchJson(`/api/sales/${unpaidSaleId}/reopen-basket`, {
+      method: "POST",
+      headers: staffHeaders,
+      body: JSON.stringify({}),
+    });
+    assert.equal(reopenRes.status, 200, JSON.stringify(reopenRes.json));
+    assert.equal(reopenRes.json.id, reopenBasketRes.json.id);
+    assert.equal(reopenRes.json.status, "OPEN");
+    assert.equal(reopenRes.json.items.length, 1);
+
+    const reopenedSaleRes = await fetchJson(`/api/sales/${unpaidSaleId}`, {
+      method: "GET",
+      headers: staffHeaders,
+    });
+    assert.equal(reopenedSaleRes.status, 404, JSON.stringify(reopenedSaleRes.json));
 
     const expectedTotal = detachCustomerRes.json.totals.totalPence;
 

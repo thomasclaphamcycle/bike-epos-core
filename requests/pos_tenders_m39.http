@@ -36,6 +36,14 @@ DELETE {{baseUrl}}/api/sales/{{saleId}}/tenders/{{tenderId}}
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 
+### Return unpaid sale to basket editing (no tenders/payments allowed)
+POST {{baseUrl}}/api/sales/{{saleId}}/reopen-basket
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
 ### Complete sale using tenders
 POST {{baseUrl}}/api/sales/{{saleId}}/complete
 Content-Type: application/json

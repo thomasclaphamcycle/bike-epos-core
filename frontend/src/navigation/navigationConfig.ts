@@ -455,11 +455,6 @@ export const navigationSections: NavigationSection[] = [
         minimumRole: "ADMIN",
       },
       {
-        kind: "label",
-        label: "Staff & Roles",
-        minimumRole: "ADMIN",
-      },
-      {
         kind: "link",
         label: "Staff List",
         to: "/settings/staff-list",
