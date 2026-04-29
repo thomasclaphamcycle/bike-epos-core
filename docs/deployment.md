@@ -185,21 +185,25 @@ The production self-hosted GitHub Actions workflows now route deploy and rollbac
    - `C:\CorePOS\.corepos-runtime\current-release.json`
    - `C:\CorePOS\.corepos-runtime\last-backup.json`
    - `C:\CorePOS\.corepos-runtime\last-release-summary.md`
-4. for normal deploy, force-sync the runtime checkout with:
+4. before the deploy guard runs, create a fresh PostgreSQL custom-format backup with:
+   - `scripts/prepare_deploy_backup.js`
+   - default backup folder `C:\CorePOSBackups`
+   - metadata written as plain UTF-8 JSON to `C:\CorePOS\.corepos-runtime\last-backup.json`
+5. for normal deploy, force-sync the runtime checkout with:
    - `git fetch origin --prune`
    - `git reset --hard origin/main`
    - `git clean -fd`
-5. for rollback, resolve either:
+6. for rollback, resolve either:
    - the latest rollback-safe release with `previous_safe`
    - the previous known-good release with `recovery_mode` after restoring a verified database backup
-6. call the existing Windows deploy entrypoint:
+7. call the existing Windows deploy entrypoint:
    - `C:\Users\coreposadmin\corepos-runtime\deploy-corepos.cmd`
-7. verify the live app explicitly on the server using:
+8. verify the live app explicitly on the server using:
    - `GET /health?details=1`
    - `GET /api/system/version`
    - `GET /login`
-8. for rollback, fail if the running revision does not match the selected rollback target
-9. only after the health checks pass, append the release to the known-good history
+9. for rollback, fail if the running revision does not match the selected rollback target
+10. only after the health checks pass, append the release to the known-good history
 
 If deployment or rollback fails, the workflow still reports:
 
@@ -227,7 +231,7 @@ Rollback notes:
 - if the rollback target is missing migration directories present in the current checkout, `previous_safe` blocks the rollback
 - after restoring the verified database backup, rerun the rollback with `recovery_mode`
 - failed rollback attempts do not rewrite the known-good release history
-- when a deploy changes migration directories, the deploy is blocked unless `last-backup.json` exists and is recent
+- when a deploy changes migration directories, the deploy is blocked unless `last-backup.json` exists, is readable, points to an existing dump, and is recent
 
 For manual validation from the production checkout, the same repo-native health probe can be run directly:
 

@@ -211,10 +211,16 @@ const runGitStdout = (repoPath, args) => {
   return (result.stdout || "").trim();
 };
 
-const readJsonFile = (filePath, fallback) => {
+const readJsonFile = (filePath, fallback, options = {}) => {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch {
+    const raw = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+    return JSON.parse(raw);
+  } catch (error) {
+    if (options.throwOnInvalid && fs.existsSync(filePath)) {
+      const label = options.label || "JSON file";
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${label} at ${filePath} is unreadable or invalid JSON: ${message}`);
+    }
     return fallback;
   }
 };
@@ -404,9 +410,16 @@ const readLiveVersionInfo = async () => {
 };
 
 const readBackupMetadata = (backupMetadataPath) => {
-  const backup = readJsonFile(backupMetadataPath, null);
-  if (!backup || typeof backup !== "object") {
+  if (!fs.existsSync(backupMetadataPath)) {
     return null;
+  }
+
+  const backup = readJsonFile(backupMetadataPath, null, {
+    throwOnInvalid: true,
+    label: "Database backup metadata",
+  });
+  if (!backup || typeof backup !== "object") {
+    throw new Error(`Database backup metadata at ${backupMetadataPath} is invalid.`);
   }
 
   return {
@@ -424,18 +437,18 @@ const ensureRecentBackup = (config) => {
 
   const backupTime = Date.parse(backup.timestamp);
   if (Number.isNaN(backupTime)) {
-    throw new Error("Deploy blocked: no recent database backup found.");
+    throw new Error("Deploy blocked: database backup metadata has an invalid timestamp.");
   }
 
   const maxAgeHours = Number.parseInt(process.env.COREPOS_BACKUP_MAX_AGE_HOURS || `${DEFAULT_BACKUP_MAX_AGE_HOURS}`, 10);
   const maxAgeMs = (Number.isFinite(maxAgeHours) && maxAgeHours > 0 ? maxAgeHours : DEFAULT_BACKUP_MAX_AGE_HOURS) * 60 * 60 * 1000;
 
   if ((Date.now() - backupTime) > maxAgeMs) {
-    throw new Error("Deploy blocked: no recent database backup found.");
+    throw new Error(`Deploy blocked: database backup is older than ${maxAgeHours} hours.`);
   }
 
   if (!fs.existsSync(backup.path)) {
-    throw new Error("Deploy blocked: no recent database backup found.");
+    throw new Error(`Deploy blocked: database backup file was not found at ${backup.path}.`);
   }
 
   return backup;

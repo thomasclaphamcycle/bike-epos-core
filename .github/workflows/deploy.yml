@@ -22,6 +22,7 @@ jobs:
       COREPOS_DEPLOY_HEALTH_INTERVAL_MS: "2000"
       COREPOS_DEPLOY_REQUEST_TIMEOUT_MS: "5000"
       COREPOS_RELEASE_STATE_DIR: C:\CorePOS\.corepos-runtime
+      COREPOS_BACKUP_DIR: C:\CorePOSBackups
       COREPOS_ROLLBACK_WORKFLOW_NAME: Rollback CorePOS Production
 
     steps:
@@ -39,6 +40,12 @@ jobs:
           Write-Host "Runtime checkout: $env:COREPOS_REPO_PATH"
           git -C $env:COREPOS_REPO_PATH status --short --branch
           git -C $env:COREPOS_REPO_PATH log --oneline -1
+
+      - name: Create pre-deploy database backup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          node scripts/prepare_deploy_backup.js
 
       - name: Run shared deploy release flow
         shell: powershell
