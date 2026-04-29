@@ -40,6 +40,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   const currentPath = location.pathname;
+  const isPosRoute = currentPath.startsWith("/pos");
   const isWorkspacePage = workspacePagePrefixes.some((prefix) => currentPath.startsWith(prefix));
   const isWorkshopOperatingScreen =
     currentPath === "/workshop"
@@ -141,7 +142,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [currentPath]);
 
   return (
-    <div className="layout-root">
+    <div className={isPosRoute ? "layout-root layout-root--pos" : "layout-root"}>
       <aside className="app-sidebar">
         <div className="sidebar-brand-block">
           <Link to="/dashboard" className="brand" aria-label="CorePOS dashboard">
@@ -262,7 +263,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <div className="app-shell">
         <main
           ref={mainRef}
-          className={currentPath.startsWith("/pos")
+          className={isPosRoute
           ? "app-main app-main--workspace app-main--pos"
           : isWorkshopOperatingScreen || isWorkshopCalendarOverview
             ? "app-main app-main--workspace app-main--workspace-wide"

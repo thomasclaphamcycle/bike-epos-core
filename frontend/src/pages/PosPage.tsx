@@ -32,10 +32,13 @@ import {
   type SaleContext,
 } from "../features/pos/posContext";
 import {
+  CARD_TERMINAL_ROUTES,
+  POS_TILL_POINTS,
   getCardTerminalRoute,
   getDefaultTerminalRouteIdForTill,
   getPosTillPoint,
   getStoredPosWorkstationAssignment,
+  isCardTerminalRouteId,
   isPosTillPointId,
   saveStoredPosWorkstationAssignment,
   type CardTerminalRouteId,
@@ -192,8 +195,9 @@ type CompleteSaleResult = {
   receiptUrl?: string;
 };
 
-type TenderMethod = AppConfig["pos"]["enabledTenderMethods"][number];
-type SaleTenderMethod = Exclude<TenderMethod, "STORE_CREDIT">;
+type ConfiguredTenderMethod = AppConfig["pos"]["enabledTenderMethods"][number];
+type TenderMethod = ConfiguredTenderMethod | "GIFT_CARD";
+type SaleTenderMethod = Exclude<ConfiguredTenderMethod, "STORE_CREDIT">;
 type CardPaymentMode = "TERMINAL" | "MANUAL";
 type MockCardTerminalStatus = "PENDING" | "APPROVED" | "DECLINED";
 type CardTerminalTrafficState = "idle" | "pending" | "approved" | "declined";
@@ -301,6 +305,7 @@ type CompletedSaleState = {
   changeDuePence: number;
   tenderMethod: TenderMethod;
   customerName: string | null;
+  customerEmail: string | null;
   cashTenderedPence: number | null;
   totalPaidPence: number;
   receiptPrintJob: ManagedPrintJobSummary | null;
@@ -372,13 +377,24 @@ const TENDER_METHOD_OPTIONS: Array<{ value: TenderMethod; label: string; shortLa
   { value: "CASH", label: "Cash", shortLabel: "Cash" },
   { value: "BANK_TRANSFER", label: "Bank transfer", shortLabel: "Bank" },
   { value: "VOUCHER", label: "Voucher", shortLabel: "Voucher" },
+  { value: "GIFT_CARD", label: "Gift card", shortLabel: "Gift" },
   { value: "STORE_CREDIT", label: "Store credit", shortLabel: "S.Credit" },
 ];
 
 const FALLBACK_TENDER_METHODS: TenderMethod[] = ["CARD", "CASH"];
+const CUSTOMER_EMAIL_DOMAIN_SHORTCUTS = [
+  "@gmail.com",
+  "@hotmail.com",
+  "@hotmail.co.uk",
+  "@outlook.com",
+  "@yahoo.co.uk",
+  "@icloud.com",
+] as const;
+
+type CustomerEmailDomainShortcut = (typeof CUSTOMER_EMAIL_DOMAIN_SHORTCUTS)[number];
 
 const isSaleTenderMethod = (method: TenderMethod): method is SaleTenderMethod =>
-  method !== "STORE_CREDIT";
+  method !== "STORE_CREDIT" && method !== "GIFT_CARD";
 
 const getTenderMethodLabel = (method: TenderMethod | string) =>
   TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
@@ -386,6 +402,76 @@ const getTenderMethodLabel = (method: TenderMethod | string) =>
 const getTenderMethodShortLabel = (method: TenderMethod | string) =>
   TENDER_METHOD_OPTIONS.find((option) => option.value === method)?.shortLabel
   ?? getTenderMethodLabel(method);
+
+const getTenderMethodIcon = (method: TenderMethod) => {
+  const commonProps = {
+    "aria-hidden": true,
+    focusable: false,
+    viewBox: "0 0 24 24",
+  } as const;
+
+  switch (method) {
+    case "CASH":
+      return (
+        <svg {...commonProps}>
+          <rect x="3.5" y="7" width="17" height="10" rx="1.5" />
+          <circle cx="12" cy="12" r="2.4" />
+          <path d="M6.5 9.5h1.2M16.3 14.5h1.2" />
+        </svg>
+      );
+    case "CARD":
+      return (
+        <svg {...commonProps}>
+          <rect x="3.5" y="6.5" width="17" height="11" rx="2" />
+          <path d="M3.5 10h17" />
+          <path d="M7 14.5h3.2" />
+        </svg>
+      );
+    case "BANK_TRANSFER":
+      return (
+        <svg {...commonProps}>
+          <path d="M4 10h16" />
+          <path d="M5.5 10v7M9.8 10v7M14.2 10v7M18.5 10v7" />
+          <path d="M3.5 17h17" />
+          <path d="M12 4.5 4.5 8h15L12 4.5Z" />
+        </svg>
+      );
+    case "VOUCHER":
+      return (
+        <svg {...commonProps}>
+          <path d="M5 8.5h14v7H5z" />
+          <path d="M8 8.5v7M16 8.5v7" />
+          <path d="m9.2 12.8 5.6-3.1M9.5 10.2h.1M14.4 14.6h.1" />
+        </svg>
+      );
+    case "STORE_CREDIT":
+      return (
+        <svg {...commonProps}>
+          <path d="M5 10.5h14" />
+          <path d="m6 10.5 1.2-4h9.6l1.2 4" />
+          <path d="M7 10.5v7h10v-7" />
+          <path d="M9 17.5v-4h6v4" />
+          <path d="M4.8 10.5c.2 1.3 1 2 2.2 2s2-.7 2.2-2c.2 1.3 1 2 2.2 2s2-.7 2.2-2c.2 1.3 1 2 2.2 2s2-.7 2.2-2" />
+        </svg>
+      );
+    case "GIFT_CARD":
+      return (
+        <svg {...commonProps}>
+          <path d="M4.5 10h15v9h-15z" />
+          <path d="M12 10v9M4 10h16M5.5 7.5h13v2.5h-13z" />
+          <path d="M12 7.5c-1.6-3-5-2.7-5-.8 0 1.6 2.2 1.7 5 .8Z" />
+          <path d="M12 7.5c1.6-3 5-2.7 5-.8 0 1.6-2.2 1.7-5 .8Z" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
+const getCustomerEmailLocalPart = (email: string) => {
+  const [localPart = ""] = email.trim().split("@");
+  return localPart.trim().replace(/\s+/g, "");
+};
 
 const getCardTerminalStatusLabel = (session: CardTerminalSessionState | null) => {
   if (!session) {
@@ -539,6 +625,7 @@ export const PosPage = () => {
   const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchRow | null>(null);
   const [customerOptionsOpen, setCustomerOptionsOpen] = useState(false);
+  const [customerToolsExpanded, setCustomerToolsExpanded] = useState(false);
   const [customerProfileModalOpen, setCustomerProfileModalOpen] = useState(false);
   const [contextCustomerId, setContextCustomerId] = useState<string | null>(null);
   const [customerLoading, setCustomerLoading] = useState(false);
@@ -547,6 +634,14 @@ export const PosPage = () => {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const hasNewCustomerEmailLocalPart = getCustomerEmailLocalPart(newCustomerEmail).length > 0;
+
+  const applyCustomerEmailDomainShortcut = (domain: CustomerEmailDomainShortcut) => {
+    setNewCustomerEmail((currentEmail) => {
+      const localPart = getCustomerEmailLocalPart(currentEmail);
+      return localPart ? `${localPart}${domain}` : currentEmail;
+    });
+  };
 
   const [basket, setBasket] = useState<BasketResponse | null>(null);
   const [sale, setSale] = useState<SaleResponse | null>(null);
@@ -571,13 +666,18 @@ export const PosPage = () => {
   const [cardTerminalLoading, setCardTerminalLoading] = useState(false);
   const [cardTerminalMessage, setCardTerminalMessage] = useState<string | null>(null);
   const [returningToBasket, setReturningToBasket] = useState(false);
+  const [paymentBasketExpanded, setPaymentBasketExpanded] = useState(false);
 
   const activeProductIndex = resolveHighlightedProductIndex(searchRows, highlightedProductIndex);
   const enabledTenderMethods = useMemo(() => {
     const configured = new Set(appConfig.pos.enabledTenderMethods);
     const enabled = TENDER_METHOD_OPTIONS
       .map((option) => option.value)
-      .filter((method) => configured.has(method));
+      .filter((method) =>
+        method === "GIFT_CARD"
+          ? configured.has("VOUCHER")
+          : configured.has(method),
+      );
 
     return enabled.length > 0 ? enabled : FALLBACK_TENDER_METHODS;
   }, [appConfig.pos.enabledTenderMethods]);
@@ -599,7 +699,8 @@ export const PosPage = () => {
   const basketItemCount = basket?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const selectedCustomerAttachedToSale = Boolean(
     selectedCustomer
-    && sale?.sale.customer?.id === selectedCustomer.id,
+    && sale
+    && (!sale.sale.customer?.id || sale.sale.customer.id === selectedCustomer.id),
   );
   const selectedCustomerAttachedToBasket = Boolean(
     selectedCustomer
@@ -607,9 +708,11 @@ export const PosPage = () => {
     && basket?.customer?.id === selectedCustomer.id,
   );
   const checkoutMode = Boolean(sale);
-  const compactCustomerRail = checkoutMode && Boolean(selectedCustomer);
-  const showCustomerTools = !compactCustomerRail;
-  const showBasketPanel = !checkoutMode || basketItemCount > 0;
+  const compactCustomerRail = checkoutMode && !customerToolsExpanded;
+  const showCustomerPanel = !completedSale;
+  const showCustomerCapturePanel = showCustomerPanel;
+  const showCustomerSearchTools = !selectedCustomer || customerToolsExpanded;
+  const showBasketPanel = !checkoutMode || paymentBasketExpanded;
   const showBasketLineControls = !checkoutMode;
   const receiptWorkstationKey = useMemo(() => getStoredReceiptWorkstationKey(), []);
   const announcedReceiptPrintFailureRef = useRef<string | null>(null);
@@ -627,6 +730,12 @@ export const PosPage = () => {
   useEffect(() => {
     selectedCustomerStateRef.current = selectedCustomer;
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!checkoutMode) {
+      setPaymentBasketExpanded(false);
+    }
+  }, [checkoutMode]);
 
   useEffect(() => {
     if (!enabledTenderMethods.includes(selectedTenderMethod)) {
@@ -715,7 +824,7 @@ export const PosPage = () => {
             searchFocusFrameRef.current = null;
             return;
           }
-          if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel")) {
+          if (activeElement.closest(".pos-customer-panel, .pos-payment-panel, .pos-basket-panel, .pos-workstation-panel")) {
             searchFocusFrameRef.current = null;
             return;
           }
@@ -763,6 +872,25 @@ export const PosPage = () => {
       terminalRouteOverride: false,
     });
     setSuggestedTillPointId(null);
+    clearCardTerminalRoutePreview();
+  };
+
+  const chooseCardTerminalRoute = (id: CardTerminalRouteId) => {
+    if (mockCardTerminalState?.status === "PENDING" || (cardTerminalSession && !cardTerminalSession.isFinal)) {
+      return;
+    }
+
+    setPosWorkstationState((current) => {
+      if (!current.tillPointId) {
+        return current;
+      }
+
+      return {
+        tillPointId: current.tillPointId,
+        terminalRouteId: id,
+        terminalRouteOverride: id !== getDefaultTerminalRouteIdForTill(current.tillPointId),
+      };
+    });
     clearCardTerminalRoutePreview();
   };
 
@@ -916,7 +1044,10 @@ export const PosPage = () => {
     if (sale) {
       return {
         ownerType: "sale",
-        sale: sale.sale,
+        sale: {
+          ...sale.sale,
+          customer: sale.sale.customer ?? selectedCustomer ?? null,
+        },
       };
     }
 
@@ -1472,6 +1603,7 @@ export const PosPage = () => {
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
     setCustomerOptionsOpen(false);
+    setCustomerToolsExpanded(false);
     setShowCreateCustomer(false);
 
     if (sale?.sale.id) {
@@ -1538,6 +1670,7 @@ export const PosPage = () => {
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
     setCustomerOptionsOpen(false);
+    setCustomerToolsExpanded(Boolean(sale?.sale.id));
     setShowCreateCustomer(false);
   };
 
@@ -1547,6 +1680,23 @@ export const PosPage = () => {
     }
 
     setCustomerProfileModalOpen(true);
+  };
+
+  const openCustomerTools = () => {
+    setCustomerToolsExpanded(true);
+    setShowCreateCustomer(false);
+    setCustomerOptionsOpen(false);
+    window.requestAnimationFrame(() => {
+      customerSearchInputRef.current?.focus();
+    });
+  };
+
+  const collapseCustomerTools = () => {
+    setCustomerToolsExpanded(false);
+    setCustomerSearchText("");
+    setCustomerResults([]);
+    setHighlightedCustomerIndex(-1);
+    setShowCreateCustomer(false);
   };
 
   const editPaymentCustomer = () => {
@@ -1563,17 +1713,20 @@ export const PosPage = () => {
     setCustomerSearchText("");
     setCustomerResults([]);
     setHighlightedCustomerIndex(-1);
+    setCustomerToolsExpanded(false);
     setCustomerOptionsOpen(false);
   };
 
   const chooseLinkedCustomer = () => {
     setShowCreateCustomer(false);
     setCustomerOptionsOpen(false);
+    setCustomerToolsExpanded(true);
     focusCustomerSearch();
   };
 
   const chooseTapCustomer = () => {
     setCustomerOptionsOpen(false);
+    setCustomerToolsExpanded(true);
     void createCustomerCaptureSession();
   };
 
@@ -1590,6 +1743,7 @@ export const PosPage = () => {
   };
 
   const chooseNewCustomer = () => {
+    setCustomerToolsExpanded(true);
     openCustomerCreatePanel();
   };
 
@@ -1603,6 +1757,10 @@ export const PosPage = () => {
   };
 
   const createCustomerAndSelect = async (options?: { openProfile?: boolean }) => {
+    if (creatingCustomer) {
+      return;
+    }
+
     if (!newCustomerName.trim()) {
       error("Customer name is required.");
       return;
@@ -1985,6 +2143,7 @@ export const PosPage = () => {
       changeDuePence: result.changeDuePence,
       tenderMethod: "CARD",
       customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+      customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
       cashTenderedPence: null,
       totalPaidPence: sale.sale.totalPence,
       receiptPrintJob: null,
@@ -2271,6 +2430,11 @@ export const PosPage = () => {
 
         if (selectedTenderMethod === "STORE_CREDIT") {
           await applyStoreCreditTender(payablePence);
+        } else if (selectedTenderMethod === "GIFT_CARD") {
+          await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
+            method: "VOUCHER",
+            amountPence: payablePence,
+          });
         } else if (selectedTenderMethod === "CARD") {
           if (
             selectedCardPaymentMode === "TERMINAL"
@@ -2303,6 +2467,7 @@ export const PosPage = () => {
         changeDuePence: result.changeDuePence,
         tenderMethod: selectedTenderMethod,
         customerName: sale.sale.customer?.name ?? selectedCustomer?.name ?? null,
+        customerEmail: sale.sale.customer?.email ?? selectedCustomer?.email ?? null,
         cashTenderedPence: selectedTenderMethod === "CASH" ? cashTenderedPence : null,
         totalPaidPence: sale.tenderSummary.totalPence,
         receiptPrintJob: null,
@@ -2404,6 +2569,10 @@ export const PosPage = () => {
   }, [sale, basket]);
 
   const basketLineCount = basket?.items.length ?? 0;
+  const activeLineItemCount = sale
+    ? sale.saleItems.reduce((sum, item) => sum + item.quantity, 0)
+    : basketItemCount;
+  const basketSummaryLabel = `${activeLineItemCount} item${activeLineItemCount === 1 ? "" : "s"}`;
   const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
   const depositPaidPence = saleContext.type === "WORKSHOP" ? saleContext.depositPaidPence ?? 0 : 0;
   const discountAppliedPence = 0;
@@ -2458,10 +2627,18 @@ export const PosPage = () => {
     : saleContext.type === "WORKSHOP" && saleContext.customerName
       ? "Workshop contact"
       : "No profile attached";
+  const activeCustomerContact =
+    sale?.sale.customer?.email
+    || sale?.sale.customer?.phone
+    || selectedCustomer?.email
+    || selectedCustomer?.phone
+    || activeCustomerStatusLabel;
   const discountSummaryLabel = discountAppliedPence > 0 ? formatMoney(discountAppliedPence) : "None";
   const discountSummaryNote = discountAppliedPence > 0 ? "Applied to basket" : "Full price";
   const depositSummaryLabel = depositPaidPence > 0 ? formatMoney(depositPaidPence) : "None";
   const depositSummaryNote = depositPaidPence > 0 ? "Already paid" : "No deposit applied";
+  const showDiscountSummary = !checkoutMode || discountAppliedPence > 0;
+  const showDepositSummary = !checkoutMode || depositPaidPence > 0;
   const storeCreditCustomer = sale?.sale.customer ?? selectedCustomer;
   const storeCreditValidationMessage =
     selectedTenderMethod === "STORE_CREDIT"
@@ -2485,7 +2662,6 @@ export const PosPage = () => {
   const posWorkstationConfigured = Boolean(selectedTillPoint);
   const suggestedTillPoint = suggestedTillPointId ? getPosTillPoint(suggestedTillPointId) : null;
   const posWorkstationTillLabel = selectedTillPoint?.label ?? "Till point not set";
-  const posWorkstationTerminalLabel = selectedCardTerminalRouteLabel;
   const cardTerminalRouteOverrideActive =
     posWorkstationState.terminalRouteOverride && selectedCardTerminalRouteId !== defaultCardTerminalRouteId;
   const cardTerminalStatusLabel = cardTerminalMessage ?? getCardTerminalStatusLabel(cardTerminalSession);
@@ -2536,6 +2712,23 @@ export const PosPage = () => {
     ?? cardTerminalSession?.amountPence
     ?? payablePence;
   const cardTerminalDisplaySetupLabel = hasConfiguredCardTerminal ? getCardTerminalSetupLabel(cardTerminalConfig) : "Demo mode";
+  const saleContextCompactItems = [
+    {
+      label: "Customer",
+      value: activeCustomerName,
+      note: activeCustomerContact,
+    },
+    {
+      label: "Basket",
+      value: basketSummaryLabel,
+      note: formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal),
+    },
+    {
+      label: "Workstation",
+      value: posWorkstationTillLabel,
+      note: selectedCardTerminalRouteLabel,
+    },
+  ];
   const cardValidationMessage =
     selectedTenderMethod !== "CARD" || payablePence <= 0
       ? null
@@ -2623,6 +2816,149 @@ export const PosPage = () => {
     };
   }, [basket, completing, confirmingCardPayment, defaultTenderMethod, sale, tenderValidationMessage]);
 
+  const completedSaleReceiptUrl = completedSale ? toBackendUrl(completedSale.receiptUrl) : "";
+  const completedSaleCustomerEmail = completedSale?.customerEmail ?? selectedCustomer?.email ?? null;
+  const completedSaleEmailHref = completedSaleCustomerEmail
+    ? `mailto:${encodeURIComponent(completedSaleCustomerEmail)}?subject=${encodeURIComponent("Your CorePOS receipt")}&body=${encodeURIComponent(`Thanks for your purchase.\n\nYour receipt is available here:\n${completedSaleReceiptUrl}`)}`
+    : null;
+
+  const completedSalePanel = completedSale ? (
+    <div className="success-panel success-panel-sale">
+      <div className="success-panel-heading">
+        <strong>Sale complete.</strong>
+        <span className="status-badge status-complete">Ready for next sale</span>
+      </div>
+      <div className="success-summary-grid">
+        <div>
+          <div className="muted-text">Sale reference</div>
+          <div className="table-primary mono-text">{completedSale.saleId}</div>
+        </div>
+        <div>
+          <div className="muted-text">Tender</div>
+          <div className="table-primary">{getTenderMethodLabel(completedSale.tenderMethod)}</div>
+        </div>
+        <div>
+          <div className="muted-text">Total paid</div>
+          <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
+        </div>
+        <div>
+          <div className="muted-text">Customer</div>
+          <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
+        </div>
+      </div>
+      {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
+        <div className="success-summary-grid success-summary-grid--cash">
+          <div>
+            <div className="muted-text">Cash received</div>
+            <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
+          </div>
+          <div>
+            <div className="muted-text">Change due</div>
+            <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
+          </div>
+        </div>
+      ) : null}
+      <div className="success-receipt-actions" aria-label="Receipt options">
+        {completedSaleEmailHref ? (
+          <a className="success-receipt-action success-receipt-action--email" href={completedSaleEmailHref}>
+            <span className="success-receipt-action__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 7.5h16v10H4z" />
+                <path d="m4.8 8.4 7.2 5.1 7.2-5.1" />
+              </svg>
+            </span>
+            <span>
+              <strong>Email receipt</strong>
+              <small>{completedSaleCustomerEmail}</small>
+            </span>
+          </a>
+        ) : (
+          <button type="button" className="success-receipt-action success-receipt-action--email" disabled>
+            <span className="success-receipt-action__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 7.5h16v10H4z" />
+                <path d="m4.8 8.4 7.2 5.1 7.2-5.1" />
+              </svg>
+            </span>
+            <span>
+              <strong>Email receipt</strong>
+              <small>No email on customer</small>
+            </span>
+          </button>
+        )}
+        <button
+          type="button"
+          className="success-receipt-action success-receipt-action--print"
+          onClick={() => void handleManagedReceiptPrint()}
+          data-testid="pos-print-receipt-link"
+          disabled={printingReceipt || Boolean(completedSale.receiptPrintJob && !isManagedPrintJobTerminal(completedSale.receiptPrintJob.status))}
+        >
+          <span className="success-receipt-action__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 8V4h10v4" />
+              <path d="M6 17H4.5v-6.5h15V17H18" />
+              <path d="M7 14h10v6H7z" />
+              <path d="M17 11.8h.1" />
+            </svg>
+          </span>
+          <span>
+            <strong>{getPosReceiptPrintButtonLabel(printingReceipt, completedSale.receiptPrintJob)}</strong>
+            <small>Thermal printer</small>
+          </span>
+        </button>
+      </div>
+      <div className="success-links success-links-sale">
+        <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
+          New sale
+        </button>
+        <a
+          href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="pos-receipt-options-link"
+        >
+          Receipt options
+        </a>
+        <a
+          href={`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="pos-print-invoice-link"
+        >
+          Print A4 invoice
+        </a>
+        <a href={completedSaleReceiptUrl} target="_blank" rel="noreferrer">
+          Open receipt
+        </a>
+        <a
+          href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open direct receipt page
+        </a>
+      </div>
+      {completedSale.receiptPrintJob ? (
+        <div className="success-panel-sale__print-status">
+          <span className={getManagedPrintJobStatusBadgeClassName(completedSale.receiptPrintJob.status)}>
+            {getManagedPrintJobStatusLabel(completedSale.receiptPrintJob.status)}
+          </span>
+          <span className="table-secondary">
+            {completedSale.receiptPrinterName || completedSale.receiptPrintJob.printerName || "Managed receipt printer"}
+            {completedSale.receiptPrintJob.status === "PENDING" ? " is queued." : null}
+            {completedSale.receiptPrintJob.status === "PROCESSING" ? " is printing now." : null}
+            {completedSale.receiptPrintJob.status === "SUCCEEDED" ? " finished printing." : null}
+            {completedSale.receiptPrintJob.status === "FAILED" ? ` failed after ${completedSale.receiptPrintJob.attemptCount} attempt${completedSale.receiptPrintJob.attemptCount === 1 ? "" : "s"}.` : null}
+            {completedSale.receiptPrintJob.status === "CANCELLED" ? " was cancelled." : null}
+          </span>
+          {completedSale.receiptPrintJob.lastError ? (
+            <span className="warning-text">{completedSale.receiptPrintJob.lastError}</span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <div className="page-shell pos-page-shell">
       <section className="pos-workstation">
@@ -2670,101 +3006,6 @@ export const PosPage = () => {
 
               {loading ? <p className="muted-text">Loading...</p> : null}
 
-              {completedSale ? (
-                <div className="success-panel success-panel-sale">
-                  <div className="success-panel-heading">
-                    <strong>Sale complete.</strong>
-                    <span className="status-badge status-complete">Ready for next sale</span>
-                  </div>
-                  <div className="success-summary-grid">
-                    <div>
-                      <div className="muted-text">Sale reference</div>
-                      <div className="table-primary mono-text">{completedSale.saleId}</div>
-                    </div>
-                    <div>
-                      <div className="muted-text">Tender</div>
-                      <div className="table-primary">{getTenderMethodLabel(completedSale.tenderMethod)}</div>
-                    </div>
-                    <div>
-                      <div className="muted-text">Total paid</div>
-                      <div className="table-primary">{formatMoney(completedSale.totalPaidPence)}</div>
-                    </div>
-                    <div>
-                      <div className="muted-text">Customer</div>
-                      <div className="table-primary">{completedSale.customerName || "Walk-in"}</div>
-                    </div>
-                  </div>
-                  {completedSale.tenderMethod === "CASH" && completedSale.cashTenderedPence !== null ? (
-                    <div className="success-summary-grid">
-                      <div>
-                        <div className="muted-text">Cash received</div>
-                        <div className="table-primary">{formatMoney(completedSale.cashTenderedPence)}</div>
-                      </div>
-                      <div>
-                        <div className="muted-text">Change due</div>
-                        <div className="table-primary">{formatMoney(completedSale.changeDuePence)}</div>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="success-links success-links-sale">
-                    <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
-                      New sale
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleManagedReceiptPrint()}
-                      data-testid="pos-print-receipt-link"
-                      disabled={printingReceipt || Boolean(completedSale.receiptPrintJob && !isManagedPrintJobTerminal(completedSale.receiptPrintJob.status))}
-                    >
-                      {getPosReceiptPrintButtonLabel(printingReceipt, completedSale.receiptPrintJob)}
-                    </button>
-                    <a
-                      href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
-                      target="_blank"
-                      rel="noreferrer"
-                      data-testid="pos-receipt-options-link"
-                    >
-                      Receipt options
-                    </a>
-                    <a
-                      href={`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`}
-                      target="_blank"
-                      rel="noreferrer"
-                      data-testid="pos-print-invoice-link"
-                    >
-                      Print A4 invoice
-                    </a>
-                    <a href={toBackendUrl(completedSale.receiptUrl)} target="_blank" rel="noreferrer">
-                      Open receipt
-                    </a>
-                    <a
-                      href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open direct receipt page
-                    </a>
-                  </div>
-                  {completedSale.receiptPrintJob ? (
-                    <div className="success-panel-sale__print-status">
-                      <span className={getManagedPrintJobStatusBadgeClassName(completedSale.receiptPrintJob.status)}>
-                        {getManagedPrintJobStatusLabel(completedSale.receiptPrintJob.status)}
-                      </span>
-                      <span className="table-secondary">
-                        {completedSale.receiptPrinterName || completedSale.receiptPrintJob.printerName || "Managed receipt printer"}
-                        {completedSale.receiptPrintJob.status === "PENDING" ? " is queued." : null}
-                        {completedSale.receiptPrintJob.status === "PROCESSING" ? " is printing now." : null}
-                        {completedSale.receiptPrintJob.status === "SUCCEEDED" ? " finished printing." : null}
-                        {completedSale.receiptPrintJob.status === "FAILED" ? ` failed after ${completedSale.receiptPrintJob.attemptCount} attempt${completedSale.receiptPrintJob.attemptCount === 1 ? "" : "s"}.` : null}
-                        {completedSale.receiptPrintJob.status === "CANCELLED" ? " was cancelled." : null}
-                      </span>
-                      {completedSale.receiptPrintJob.lastError ? (
-                        <span className="warning-text">{completedSale.receiptPrintJob.lastError}</span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
 
             <section className="pos-panel pos-search-panel">
@@ -2942,52 +3183,26 @@ export const PosPage = () => {
 
           </div>
 
-          <div className={`pos-side-column${checkoutMode ? " pos-side-column--checkout" : ""}`}>
+          <div className={`pos-side-column${checkoutMode ? " pos-side-column--checkout" : ""}${completedSale ? " pos-side-column--complete" : ""}`}>
+            {completedSalePanel}
+
+            {showCustomerPanel ? (
             <section className={`pos-panel pos-customer-panel${compactCustomerRail ? " pos-customer-panel--checkout" : ""}`}>
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Customer</div>
                 </div>
-                {selectedCustomer ? (
-                  <button
-                    type="button"
-                    data-testid="pos-customer-clear"
-                    onClick={() => void clearSelectedCustomer()}
-                  >
-                    {compactCustomerRail
-                      ? "Remove"
-                      : selectedCustomerAttachedToSale || selectedCustomerAttachedToBasket
-                      ? "Remove customer"
-                      : "Clear selection"}
-                  </button>
-                ) : null}
               </div>
 
               {selectedCustomer ? (
-                <div
-                  className={`selected-customer-panel selected-customer-panel--interactive${compactCustomerRail ? " selected-customer-panel--checkout" : ""}`}
-                  data-testid="pos-selected-customer"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open full customer profile for ${selectedCustomer.name}`}
-                  onClick={openCustomerProfileModal}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openCustomerProfileModal();
-                    }
-                  }}
-                >
+                <div className={`selected-customer-panel${compactCustomerRail ? " selected-customer-panel--checkout" : ""}`} data-testid="pos-selected-customer">
                   <div className="selected-customer-panel__summary">
-                    <div className="table-primary">{selectedCustomer.name}</div>
-                    <div className="muted-text">
-                      {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
+                    <div className="selected-customer-panel__identity">
+                      <div className="table-primary">{selectedCustomer.name}</div>
+                      <div className="muted-text">
+                        {selectedCustomer.email || selectedCustomer.phone || "No contact details"}
+                      </div>
                     </div>
-                    {!compactCustomerRail ? (
-                      <div className="selected-customer-panel__hint">Tap for full profile</div>
-                    ) : null}
-                  </div>
-                  <div className="selected-customer-panel__meta">
                     <div className="customer-status-chip">
                       {selectedCustomerAttachedToSale
                         ? "Attached to sale"
@@ -2996,10 +3211,34 @@ export const PosPage = () => {
                           : "Selected for checkout"}
                     </div>
                   </div>
+                  <div className="selected-customer-panel__actions" aria-label={`Customer actions for ${selectedCustomer.name}`}>
+                    {!compactCustomerRail || customerToolsExpanded ? (
+                      <button type="button" className="selected-customer-action" onClick={openCustomerProfileModal}>
+                        Profile
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="selected-customer-action"
+                      onClick={customerToolsExpanded ? collapseCustomerTools : openCustomerTools}
+                      aria-expanded={customerToolsExpanded}
+                    >
+                      {customerToolsExpanded ? "Done" : "Change"}
+                    </button>
+                    <button
+                      type="button"
+                      className="selected-customer-action selected-customer-action--danger"
+                      data-testid="pos-customer-clear"
+                      onClick={() => void clearSelectedCustomer()}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
-              <div className={compactCustomerRail ? "pos-customer-capture-compact-shell" : undefined}>
+              {showCustomerCapturePanel ? (
+                <div className={compactCustomerRail ? "pos-customer-capture-compact-shell" : undefined}>
                   <PosCustomerCapturePanel
                     target={customerCaptureTarget}
                     isCaptureEligible={isCaptureEligible}
@@ -3022,9 +3261,10 @@ export const PosPage = () => {
                       void refreshTargetAfterCustomerCapture(customerCaptureTarget, { showToast: true });
                     }}
                   />
-              </div>
+                </div>
+              ) : null}
 
-              {showCustomerTools ? (
+              {showCustomerSearchTools ? (
                 <>
                   <div className="customer-search-panel">
                     <div className="customer-search-stack grow">
@@ -3113,17 +3353,24 @@ export const PosPage = () => {
                     >
                       {showCreateCustomer ? "Hide quick create" : "Quick create"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void clearBasket()}
-                      disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
-                    >
-                      Clear basket
-                    </button>
                   </div>
 
                   {showCreateCustomer ? (
-                    <div className="quick-create-panel pos-customer-create-panel">
+                    <form
+                      className="quick-create-panel pos-customer-create-panel"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        void createCustomerAndSelect();
+                      }}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void createCustomerAndSelect();
+                      }}
+                    >
                       <div className="quick-create-grid">
                         <label>
                           Name
@@ -3134,14 +3381,30 @@ export const PosPage = () => {
                             placeholder="Customer name"
                           />
                         </label>
-                        <label>
-                          Email
-                          <input
-                            value={newCustomerEmail}
-                            onChange={(event) => setNewCustomerEmail(event.target.value)}
-                            placeholder="name@example.com"
-                          />
-                        </label>
+                        <div className="pos-quick-create-email-field">
+                          <label>
+                            Email
+                            <input
+                              value={newCustomerEmail}
+                              onChange={(event) => setNewCustomerEmail(event.target.value)}
+                              placeholder="name@example.com"
+                            />
+                          </label>
+                          <div className="pos-email-domain-shortcuts" aria-label="Common email domains">
+                            {CUSTOMER_EMAIL_DOMAIN_SHORTCUTS.map((domain) => (
+                              <button
+                                key={domain}
+                                type="button"
+                                className="pos-email-domain-chip"
+                                onClick={() => applyCustomerEmailDomainShortcut(domain)}
+                                disabled={!hasNewCustomerEmailLocalPart}
+                                aria-label={`Set email domain to ${domain}`}
+                              >
+                                {domain}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <label>
                           Phone
                           <input
@@ -3152,7 +3415,7 @@ export const PosPage = () => {
                         </label>
                       </div>
                       <div className="actions-inline">
-                        <button type="button" className="primary" onClick={() => void createCustomerAndSelect()} disabled={creatingCustomer}>
+                        <button type="submit" className="primary" disabled={creatingCustomer}>
                           {creatingCustomer ? "Creating..." : "Create and Select"}
                         </button>
                         <button
@@ -3164,32 +3427,64 @@ export const PosPage = () => {
                           Add more details
                         </button>
                       </div>
-                    </div>
+                    </form>
                   ) : null}
                 </>
               ) : null}
 
             </section>
+            ) : null}
 
+            {!checkoutMode ? (
             <section className={`pos-panel pos-workstation-panel${posWorkstationConfigured ? "" : " pos-workstation-panel--warning"}`}>
               <div className="pos-panel-heading">
                 <div>
                   <div className="pos-section-kicker">Workstation</div>
                 </div>
-                <Link className="button-link pos-workstation-setup-link" to="/settings/pos#till-workstation-setup">
-                  Setup
-                </Link>
               </div>
 
               <div className="pos-workstation-summary">
-                <div>
+                <label className="pos-workstation-picker">
                   <span>Till point</span>
-                  <strong>{posWorkstationTillLabel}</strong>
-                </div>
-                <div>
+                  <select
+                    value={posWorkstationState.tillPointId ?? ""}
+                    onChange={(event) => {
+                      const nextTillPointId = event.target.value;
+                      if (isPosTillPointId(nextTillPointId)) {
+                        chooseTillPoint(nextTillPointId);
+                      }
+                    }}
+                    disabled={hasInProgressCardTerminalSession}
+                    aria-label="Till point"
+                  >
+                    <option value="" disabled>Choose till</option>
+                    {POS_TILL_POINTS.map((tillPoint) => (
+                      <option key={tillPoint.id} value={tillPoint.id}>
+                        {tillPoint.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="pos-workstation-picker">
                   <span>Card terminal</span>
-                  <strong>{posWorkstationTerminalLabel}</strong>
-                </div>
+                  <select
+                    value={selectedCardTerminalRouteId}
+                    onChange={(event) => {
+                      const nextTerminalRouteId = event.target.value;
+                      if (isCardTerminalRouteId(nextTerminalRouteId)) {
+                        chooseCardTerminalRoute(nextTerminalRouteId);
+                      }
+                    }}
+                    disabled={!posWorkstationConfigured || hasInProgressCardTerminalSession}
+                    aria-label="Card terminal route"
+                  >
+                    {CARD_TERMINAL_ROUTES.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {getCardTerminalRouteLabel(route.id, cardTerminals, cardTerminalConfig)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               {!posWorkstationConfigured ? (
@@ -3203,6 +3498,7 @@ export const PosPage = () => {
                 </div>
               ) : null}
             </section>
+            ) : null}
 
             {showBasketPanel ? (
               <section className="pos-panel pos-basket-panel">
@@ -3210,6 +3506,27 @@ export const PosPage = () => {
                   <div>
                     <div className="pos-section-kicker">Basket</div>
                   </div>
+                  {showBasketLineControls || checkoutMode ? (
+                    <div className="actions-inline pos-basket-heading-actions">
+                      {showBasketLineControls ? (
+                        <button
+                          type="button"
+                          onClick={() => void clearBasket()}
+                          disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
+                        >
+                          Clear basket
+                        </button>
+                      ) : null}
+                      {checkoutMode ? (
+                        <button
+                          type="button"
+                          onClick={() => setPaymentBasketExpanded(false)}
+                        >
+                          Hide basket
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 {basket && basket.items.length > 0 ? (
@@ -3261,7 +3578,13 @@ export const PosPage = () => {
                                       +
                                     </button>
                                   </div>
-                                  <button type="button" onClick={() => void removeLine(item.id)} disabled={Boolean(saleId)}>
+                                  <button
+                                    type="button"
+                                    className="pos-line-remove-button"
+                                    onClick={() => void removeLine(item.id)}
+                                    disabled={Boolean(saleId)}
+                                    aria-label={`Remove ${item.productName}`}
+                                  >
                                     Remove
                                   </button>
                                 </div>
@@ -3271,6 +3594,32 @@ export const PosPage = () => {
                         </div>
                       </section>
                     ))}
+                  </div>
+                ) : sale && sale.saleItems.length > 0 ? (
+                  <div className="pos-basket-groups">
+                    <section className="pos-basket-group pos-basket-group-labour">
+                      <div className="pos-basket-group-header pos-group-row">
+                        <div>
+                          <strong>Sale items</strong>
+                        </div>
+                      </div>
+                      <div className="pos-basket-list">
+                        {sale.saleItems.map((item) => (
+                          <article key={item.id} className="pos-line-item pos-line-item-readonly">
+                            <div className="pos-line-main">
+                              <div className="table-primary pos-line-title">
+                                {item.productName}
+                                {item.variantName ? ` (${item.variantName})` : ""}
+                              </div>
+                            </div>
+                            <div className="pos-line-pricing">
+                              <strong>{formatMoney(item.lineTotalPence)}</strong>
+                              <span>{item.quantity} × {formatMoney(item.unitPricePence)}</span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 ) : (
                   <div className="pos-empty-state">
@@ -3305,9 +3654,39 @@ export const PosPage = () => {
                       {returningToBasket ? "Returning..." : "Back to basket"}
                     </button>
                   ) : null}
-                  <span className="pos-payment-state">{sale ? "Sale live" : "Basket open"}</span>
+                  {!sale ? <span className="pos-payment-state">Basket open</span> : null}
                 </div>
               </div>
+
+              {sale ? (
+                <div className="pos-payment-focus-summary" data-testid="pos-payment-focus-summary">
+                  <div className="pos-payment-focus-summary__items">
+                    {saleContextCompactItems.map((item) => (
+                      <div key={item.label} className="pos-payment-focus-summary__item">
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                        <small>{item.note}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pos-payment-focus-summary__actions">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentBasketExpanded((current) => !current)}
+                      aria-expanded={paymentBasketExpanded}
+                    >
+                      {paymentBasketExpanded ? "Hide basket" : "View basket"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openCustomerTools}
+                      aria-expanded={customerToolsExpanded}
+                    >
+                      Change customer
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               {saleContext.type === "WORKSHOP" ? (
                 <div className="pos-checkout-summary pos-payment-summary" data-testid="pos-checkout-summary">
@@ -3323,16 +3702,20 @@ export const PosPage = () => {
                     <span className="muted-text">Remaining</span>
                     <strong>{formatMoney(payablePence)}</strong>
                   </div>
-                  <div>
-                    <span className="muted-text">Discount</span>
-                    <strong>{discountSummaryLabel}</strong>
-                    <span className="pos-payment-summary-note">{discountSummaryNote}</span>
-                  </div>
-                  <div>
-                    <span className="muted-text">Deposit</span>
-                    <strong>{depositSummaryLabel}</strong>
-                    <span className="pos-payment-summary-note">{depositSummaryNote}</span>
-                  </div>
+                  {showDiscountSummary ? (
+                    <div>
+                      <span className="muted-text">Discount</span>
+                      <strong>{discountSummaryLabel}</strong>
+                      <span className="pos-payment-summary-note">{discountSummaryNote}</span>
+                    </div>
+                  ) : null}
+                  {showDepositSummary ? (
+                    <div>
+                      <span className="muted-text">Deposit</span>
+                      <strong>{depositSummaryLabel}</strong>
+                      <span className="pos-payment-summary-note">{depositSummaryNote}</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="pos-payment-summary pos-payment-summary-retail">
@@ -3344,16 +3727,20 @@ export const PosPage = () => {
                     <span className="muted-text">Total</span>
                     <strong>{formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal)}</strong>
                   </div>
-                  <div>
-                    <span className="muted-text">Discount</span>
-                    <strong>{discountSummaryLabel}</strong>
-                    <span className="pos-payment-summary-note">{discountSummaryNote}</span>
-                  </div>
-                  <div>
-                    <span className="muted-text">Deposit</span>
-                    <strong>{depositSummaryLabel}</strong>
-                    <span className="pos-payment-summary-note">{depositSummaryNote}</span>
-                  </div>
+                  {showDiscountSummary ? (
+                    <div>
+                      <span className="muted-text">Discount</span>
+                      <strong>{discountSummaryLabel}</strong>
+                      <span className="pos-payment-summary-note">{discountSummaryNote}</span>
+                    </div>
+                  ) : null}
+                  {showDepositSummary ? (
+                    <div>
+                      <span className="muted-text">Deposit</span>
+                      <strong>{depositSummaryLabel}</strong>
+                      <span className="pos-payment-summary-note">{depositSummaryNote}</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -3397,21 +3784,32 @@ export const PosPage = () => {
 
               {sale ? (
                 <>
-                  <div className="actions-inline pos-tender-switch" role="group" aria-label="Tender type">
-                    {enabledTenderMethods.map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        className={selectedTenderMethod === method ? "primary" : ""}
-                        onClick={() => chooseTenderMethod(method)}
-                        disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
-                        aria-label={getTenderMethodLabel(method)}
-                        title={getTenderMethodLabel(method)}
-                      >
-                        {getTenderMethodShortLabel(method)}
-                      </button>
-                    ))}
-                  </div>
+                  <section className="pos-payment-method-panel" aria-label="Payment method">
+                    <div className="pos-payment-method-panel__heading">
+                      <span>Payment method</span>
+                    </div>
+                    <div className="pos-tender-switch" role="group" aria-label="Tender type">
+                      {enabledTenderMethods.map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          className={[
+                            "pos-tender-option",
+                            selectedTenderMethod === method ? "primary pos-tender-option--active" : "",
+                          ].filter(Boolean).join(" ")}
+                          onClick={() => chooseTenderMethod(method)}
+                          disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                          aria-label={getTenderMethodLabel(method)}
+                          title={getTenderMethodLabel(method)}
+                        >
+                          <strong className="pos-tender-option__symbol" aria-hidden="true">
+                            {getTenderMethodIcon(method)}
+                          </strong>
+                          <span>{getTenderMethodLabel(method)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
 
                   {selectedTenderMethod === "CARD" ? (
                     <div className="quick-create-panel pos-card-panel">
@@ -3422,7 +3820,7 @@ export const PosPage = () => {
                           onClick={() => chooseCardPaymentMode("TERMINAL")}
                           disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
                         >
-                          Send to terminal
+                          Auto
                         </button>
                         <button
                           type="button"
@@ -3430,7 +3828,7 @@ export const PosPage = () => {
                           onClick={() => chooseCardPaymentMode("MANUAL")}
                           disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
                         >
-                          Manual approval
+                          Manual
                         </button>
                       </div>
 
@@ -3456,9 +3854,6 @@ export const PosPage = () => {
                                 <em>Custom terminal route</em>
                               ) : null}
                             </div>
-                            <Link className="button-link" to="/settings/pos#till-workstation-setup">
-                              Setup
-                            </Link>
                           </div>
 
                           <div
@@ -3690,8 +4085,19 @@ export const PosPage = () => {
                         ))}
                       </div>
 
-                      <div className="muted-text pos-cash-summary">
-                        Due: {formatMoney(payablePence)} | Tendered: {formatMoney(cashTenderedPence ?? 0)} | Change: {formatMoney(cashChangeDuePence)}
+                      <div className="pos-cash-summary" aria-label="Cash payment summary">
+                        <div>
+                          <span>Due</span>
+                          <strong>{formatMoney(payablePence)}</strong>
+                        </div>
+                        <div>
+                          <span>Tendered</span>
+                          <strong>{formatMoney(cashTenderedPence ?? 0)}</strong>
+                        </div>
+                        <div className={`pos-cash-change${cashChangeDuePence > 0 ? " pos-cash-change--due" : ""}`}>
+                          <span>Change</span>
+                          <strong>{formatMoney(cashChangeDuePence)}</strong>
+                        </div>
                       </div>
 
                       {cashValidationMessage ? <p className="muted-text pos-cash-warning">{cashValidationMessage}</p> : null}
