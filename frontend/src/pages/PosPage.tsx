@@ -6,7 +6,10 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToasts } from "../components/ToastProvider";
 import { PosCustomerCapturePanel } from "../features/customerCapture/PosCustomerCapturePanel";
 import { usePosCustomerCapture } from "../features/customerCapture/usePosCustomerCapture";
-import { type PosCustomerCaptureTarget } from "../features/customerCapture/posCustomerCapture";
+import {
+  getCaptureTargetCustomer,
+  type PosCustomerCaptureTarget,
+} from "../features/customerCapture/posCustomerCapture";
 import {
   getManagedPrintJob,
   getManagedPrintJobStatusBadgeClassName,
@@ -161,6 +164,15 @@ type SaleResponse = {
     sourceDetail?: string | null;
     customer: CustomerSearchRow | null;
   };
+  layaway: {
+    id: string;
+    status: string;
+    totalPence: number;
+    depositPaidPence: number;
+    remainingPence: number;
+    expiresAt: string;
+    requiresReview: boolean;
+  } | null;
   saleItems: Array<{
     id: string;
     productName: string;
@@ -169,6 +181,11 @@ type SaleResponse = {
     unitPricePence: number;
     lineTotalPence: number;
   }>;
+  payment?: {
+    id: string;
+    method: string;
+    amountPence: number;
+  } | null;
   tenderSummary: {
     totalPence: number;
     tenderedPence: number;
@@ -204,7 +221,6 @@ type SaleTenderMethod = Exclude<ConfiguredTenderMethod, "STORE_CREDIT">;
 type ManualConfirmationTenderMethod = Extract<TenderMethod, "BANK_TRANSFER" | "VOUCHER" | "GIFT_CARD">;
 type CardPaymentMode = "TERMINAL" | "MANUAL";
 type CashOverpaymentDisposition = "CHANGE" | "STORE_CREDIT";
-type LayawayDepositMethod = "CASH" | "CARD" | "OTHER";
 type MockCardTerminalStatus = "PENDING" | "APPROVED" | "DECLINED";
 type CardTerminalTrafficState = "idle" | "pending" | "approved" | "declined";
 
@@ -418,11 +434,6 @@ const TENDER_METHOD_OPTIONS: Array<{ value: TenderMethod; label: string; shortLa
 ];
 
 const FALLBACK_TENDER_METHODS: TenderMethod[] = ["CARD", "CASH"];
-const LAYAWAY_DEPOSIT_METHOD_OPTIONS: Array<{ value: LayawayDepositMethod; label: string }> = [
-  { value: "CASH", label: "Cash" },
-  { value: "CARD", label: "Card" },
-  { value: "OTHER", label: "Other" },
-];
 const CUSTOMER_EMAIL_DOMAIN_SHORTCUTS = [
   "@gmail.com",
   "@hotmail.com",
@@ -685,6 +696,7 @@ export const PosPage = () => {
   const newCustomerNameInputRef = useRef<HTMLInputElement | null>(null);
   const cashTenderedInputRef = useRef<HTMLInputElement | null>(null);
   const completedSaleEmailInputRef = useRef<HTMLInputElement | null>(null);
+  const layawayPaymentAmountInputRef = useRef<HTMLInputElement | null>(null);
   const lastAddedRowTimeoutRef = useRef<number | null>(null);
   const cardTerminalPollTimeoutRef = useRef<number | null>(null);
   const pendingQuerySyncFrameRef = useRef<number | null>(null);
@@ -741,8 +753,7 @@ export const PosPage = () => {
   const [voucherProvidersLoading, setVoucherProvidersLoading] = useState(false);
   const [selectedVoucherProviderId, setSelectedVoucherProviderId] = useState("");
   const [layawayPanelOpen, setLayawayPanelOpen] = useState(false);
-  const [layawayDepositAmount, setLayawayDepositAmount] = useState("");
-  const [layawayDepositMethod, setLayawayDepositMethod] = useState<LayawayDepositMethod>("CASH");
+  const [layawayPaymentAmount, setLayawayPaymentAmount] = useState("");
   const [layawayExpiryDays, setLayawayExpiryDays] = useState("14");
   const [layawayNotes, setLayawayNotes] = useState("");
   const [savingLayaway, setSavingLayaway] = useState(false);
@@ -807,7 +818,6 @@ export const PosPage = () => {
   const checkoutMode = Boolean(sale);
   const compactCustomerRail = checkoutMode && !customerToolsExpanded;
   const showCustomerPanel = !completedSale;
-  const showCustomerCapturePanel = showCustomerPanel;
   const showCustomerSearchTools = !selectedCustomer || customerToolsExpanded;
   const showBasketPanel = !checkoutMode || paymentBasketExpanded;
   const showBasketLineControls = !checkoutMode;
@@ -991,8 +1001,8 @@ export const PosPage = () => {
       setCashTenderedAmount("");
       setCashOverpaymentDisposition("CHANGE");
     }
-    if (method === "VOUCHER" && payablePence > 0) {
-      setVoucherTenderedAmount((payablePence / 100).toFixed(2));
+    if (method === "VOUCHER" && paymentAmountPence > 0) {
+      setVoucherTenderedAmount((paymentAmountPence / 100).toFixed(2));
     } else if (method !== "VOUCHER") {
       setVoucherTenderedAmount("");
       setSelectedVoucherProviderId("");
@@ -1009,6 +1019,16 @@ export const PosPage = () => {
       setMockCardTerminalState(null);
       setCardTerminalMessage(null);
     }
+  };
+
+  const applyLayawayPaymentShortcut = (percentage: number) => {
+    if (payablePence <= 0) {
+      setLayawayPaymentAmount("");
+      return;
+    }
+
+    const shortcutAmountPence = Math.max(1, Math.round(payablePence * percentage));
+    setLayawayPaymentAmount((shortcutAmountPence / 100).toFixed(2));
   };
 
   const clearCardTerminalRoutePreview = () => {
@@ -1197,6 +1217,15 @@ export const PosPage = () => {
     return payload;
   };
 
+  useEffect(() => {
+    if (sale?.layaway && sale.tenderSummary.remainingPence > 0) {
+      setLayawayPaymentAmount((sale.tenderSummary.remainingPence / 100).toFixed(2));
+      return;
+    }
+
+    setLayawayPaymentAmount("");
+  }, [sale?.sale.id, sale?.layaway?.id, sale?.tenderSummary.remainingPence]);
+
   const customerCaptureTarget = useMemo<PosCustomerCaptureTarget | null>(() => {
     if (sale) {
       return {
@@ -1243,6 +1272,17 @@ export const PosPage = () => {
     success,
     error,
   });
+  const hasCustomerCaptureTargetCustomer = Boolean(getCaptureTargetCustomer(customerCaptureTarget));
+  const showCustomerCapturePanel = showCustomerPanel && (
+    !compactCustomerRail
+    || !selectedCustomer
+    || hasCustomerCaptureTargetCustomer
+    || customerToolsExpanded
+    || Boolean(captureSession)
+    || Boolean(captureCompletionSummary)
+    || creatingCaptureSession
+    || Boolean(captureStatusError)
+  );
 
   const createBasket = async (options?: {
     saleContext?: SaleContext;
@@ -2234,18 +2274,6 @@ export const PosPage = () => {
       return;
     }
 
-    const depositPence = layawayDepositAmount.trim()
-      ? parseCurrencyInputToPence(layawayDepositAmount)
-      : null;
-    if (layawayDepositAmount.trim() && (depositPence === null || depositPence <= 0)) {
-      error("Deposit must be a valid amount.");
-      return;
-    }
-    if (depositPence !== null && depositPence > basket.totals.totalPence) {
-      error("Deposit cannot be more than the basket total.");
-      return;
-    }
-
     setSavingLayaway(true);
     try {
       const requestId = beginPosLifecycleRequest();
@@ -2254,15 +2282,6 @@ export const PosPage = () => {
         {
           expiryDays,
           notes: layawayNotes.trim() || null,
-          ...(depositPence
-            ? {
-                deposit: {
-                  paymentMethod: layawayDepositMethod,
-                  amountPence: depositPence,
-                  providerRef: "POS_LAYAWAY_DEPOSIT",
-                },
-              }
-            : {}),
         },
       );
       if (!canApplyPosLifecycle(requestId)) {
@@ -2275,20 +2294,26 @@ export const PosPage = () => {
       }
       syncQuery({ basketId: activeBasketId, saleId: payload.layaway.saleId });
       setLayawayPanelOpen(false);
-      setLayawayDepositAmount("");
-      setLayawayDepositMethod("CASH");
       setLayawayNotes("");
       success(
         nextSale?.sale.customer?.id
-          ? "Layaway saved and stock held for this customer."
-          : "Layaway saved. Stock is held until the expiry date.",
+          ? "Layaway saved and stock held for this customer. Choose a payment method to take a deposit."
+          : "Layaway saved. Stock is held until the expiry date. Choose a payment method to take a deposit.",
       );
+      window.requestAnimationFrame(() => {
+        layawayPaymentAmountInputRef.current?.focus();
+        layawayPaymentAmountInputRef.current?.select();
+      });
     } catch (layawayError) {
       error(layawayError instanceof Error ? layawayError.message : "Could not create layaway");
     } finally {
       setSavingLayaway(false);
     }
   };
+
+  function openLayawayPanel() {
+    setLayawayPanelOpen(true);
+  }
 
   const applyStoreCreditTender = async (amountPence: number) => {
     if (!sale) {
@@ -2334,12 +2359,42 @@ export const PosPage = () => {
     }
   };
 
+  const resetPaymentEntryState = () => {
+    setCashTenderedAmount("");
+    setCashOverpaymentDisposition("CHANGE");
+    setVoucherTenderedAmount("");
+    setSelectedVoucherProviderId("");
+    setConfirmedManualTenderMethod(null);
+    setCardTerminalSession(null);
+    setMockCardTerminalState(null);
+    setCardTerminalMessage(null);
+    clearCardTerminalPoll();
+  };
+
+  const refreshLayawayAfterPayment = async (tenderLabel: string) => {
+    if (!sale) {
+      return null;
+    }
+
+    const refreshedSale = await loadSale(sale.sale.id);
+    resetPaymentEntryState();
+
+    const remainingAfterPayment = refreshedSale?.tenderSummary.remainingPence ?? 0;
+    if (remainingAfterPayment > 0) {
+      success(`${tenderLabel} recorded. ${formatMoney(remainingAfterPayment)} still due on this layaway.`);
+    } else {
+      success("Final payment recorded. Complete the layaway when the customer collects.");
+    }
+
+    return refreshedSale;
+  };
+
   const confirmManualCardPayment = async () => {
     if (!sale) {
       error("No sale to confirm card payment for.");
       return;
     }
-    if (payablePence <= 0) {
+    if (paymentAmountPence <= 0) {
       success("Card payment is already covered.");
       return;
     }
@@ -2348,10 +2403,14 @@ export const PosPage = () => {
     try {
       await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
         method: "CARD",
-        amountPence: payablePence,
+        amountPence: paymentAmountPence,
       });
-      await loadSale(sale.sale.id);
-      success("Card payment confirmed.");
+      if (isLayawaySale) {
+        await refreshLayawayAfterPayment("Card payment");
+      } else {
+        await loadSale(sale.sale.id);
+        success("Card payment confirmed.");
+      }
     } catch (cardError) {
       const message = cardError instanceof Error ? cardError.message : "Card payment confirmation failed";
       error(message);
@@ -2405,7 +2464,12 @@ export const PosPage = () => {
 
     if (nextSession.status === "CAPTURED") {
       setCardTerminalLoading(false);
-      await completeCardTerminalSale(nextSession);
+      if (isLayawaySale) {
+        clearCardTerminalPoll();
+        await refreshLayawayAfterPayment("Card payment");
+      } else {
+        await completeCardTerminalSale(nextSession);
+      }
       return true;
     }
 
@@ -2453,7 +2517,7 @@ export const PosPage = () => {
       error("No sale to send to the card terminal.");
       return;
     }
-    if (payablePence <= 0) {
+    if (paymentAmountPence <= 0) {
       success("Card payment is already covered.");
       return;
     }
@@ -2465,7 +2529,7 @@ export const PosPage = () => {
     setCardTerminalMessage(`Waiting for the customer on ${terminalLabel}.`);
     setMockCardTerminalState({
       status: "PENDING",
-      amountPence: payablePence,
+      amountPence: paymentAmountPence,
       tillPointId: posWorkstationState.tillPointId ?? "TILL_1",
       terminalRouteId: selectedCardTerminalRouteId,
       terminalLabel,
@@ -2521,7 +2585,7 @@ export const PosPage = () => {
       error("No sale to send to the card terminal.");
       return;
     }
-    if (payablePence <= 0) {
+    if (paymentAmountPence <= 0) {
       success("Card payment is already covered.");
       return;
     }
@@ -2544,7 +2608,7 @@ export const PosPage = () => {
     try {
       const payload = await apiPost<CardTerminalSessionResponse>("/api/payments/terminal-sessions", {
         saleId: sale.sale.id,
-        amountPence: payablePence,
+        amountPence: paymentAmountPence,
         terminalId,
       });
       const finished = await handleCardTerminalSessionResult(payload);
@@ -2657,6 +2721,7 @@ export const PosPage = () => {
     try {
       const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
       const voucherPaymentPence = parseCurrencyInputToPence(voucherTenderedAmount);
+      const isRecordingLayawayPayment = isLayawaySale && payablePence > 0;
       if (payablePence > 0) {
         if (selectedTenderMethod === "CASH") {
           if (cashTenderedPence === null) {
@@ -2664,8 +2729,8 @@ export const PosPage = () => {
             return;
           }
 
-          if (cashTenderedPence < payablePence) {
-            error("Cash tendered must cover the total due.");
+          if (cashTenderedPence < paymentAmountPence) {
+            error(isLayawaySale ? "Cash tendered must cover the amount being taken now." : "Cash tendered must cover the total due.");
             return;
           }
         }
@@ -2684,12 +2749,17 @@ export const PosPage = () => {
             return;
           }
 
-          if (voucherPaymentPence < payablePence) {
-            error("Voucher value must cover the total due.");
+          if (voucherPaymentPence < paymentAmountPence) {
+            error(isLayawaySale ? "Voucher value must cover the amount being taken now." : "Voucher value must cover the total due.");
             return;
           }
 
-          if (voucherPaymentPence > payablePence && !cashOverpaymentCustomer?.id) {
+          if (isLayawaySale && voucherPaymentPence > paymentAmountPence) {
+            error("Voucher value must match the layaway payment being taken now.");
+            return;
+          }
+
+          if (voucherPaymentPence > paymentAmountPence && !cashOverpaymentCustomer?.id) {
             error("Attach a customer before adding voucher overpayment to store credit.");
             return;
           }
@@ -2704,33 +2774,33 @@ export const PosPage = () => {
         }
 
         if (selectedTenderMethod === "STORE_CREDIT") {
-          await applyStoreCreditTender(payablePence);
+          await applyStoreCreditTender(paymentAmountPence);
         } else if (selectedTenderMethod === "GIFT_CARD") {
           await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
             method: "VOUCHER",
-            amountPence: payablePence,
+            amountPence: paymentAmountPence,
           });
         } else if (selectedTenderMethod === "CARD") {
           if (
             selectedCardPaymentMode === "TERMINAL"
             && mockCardTerminalState?.status === "APPROVED"
-            && mockCardTerminalState.amountPence >= payablePence
+            && mockCardTerminalState.amountPence >= paymentAmountPence
           ) {
             await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
               method: "CARD",
-              amountPence: payablePence,
+              amountPence: paymentAmountPence,
             });
           } else {
-            error("Confirm card payment before completing the sale.");
+            error(isLayawaySale ? "Confirm card payment before recording it against the layaway." : "Confirm card payment before completing the sale.");
             return;
           }
         } else if (isSaleTenderMethod(selectedTenderMethod)) {
           const amountPence =
             selectedTenderMethod === "CASH"
-              ? cashTenderedPence
+              ? (isRecordingLayawayPayment ? paymentAmountPence : cashTenderedPence)
               : selectedTenderMethod === "VOUCHER"
-                ? voucherPaymentPence
-                : payablePence;
+                ? (isRecordingLayawayPayment ? paymentAmountPence : voucherPaymentPence)
+                : paymentAmountPence;
           await apiPost(`/api/sales/${encodeURIComponent(sale.sale.id)}/tenders`, {
             method: selectedTenderMethod,
             amountPence,
@@ -2739,6 +2809,11 @@ export const PosPage = () => {
               : {}),
           });
         }
+      }
+
+      if (isRecordingLayawayPayment) {
+        await refreshLayawayAfterPayment(getTenderMethodLabel(selectedTenderMethod));
+        return;
       }
 
       const result = await apiPost<CompleteSaleResult>(
@@ -2776,7 +2851,9 @@ export const PosPage = () => {
       setSelectedVoucherProviderId("");
       setConfirmedManualTenderMethod(null);
       success(
-        result.creditedChangePence && result.creditedChangePence > 0
+        isLayawaySale
+          ? "Layaway completed."
+          : result.creditedChangePence && result.creditedChangePence > 0
           ? `Sale completed. ${formatMoney(result.creditedChangePence)} added to store credit.`
           : "Sale completed.",
       );
@@ -2930,11 +3007,30 @@ export const PosPage = () => {
     ? sale.saleItems.reduce((sum, item) => sum + item.quantity, 0)
     : basketItemCount;
   const basketSummaryLabel = `${activeLineItemCount} item${activeLineItemCount === 1 ? "" : "s"}`;
+  const layaway = sale?.layaway ?? null;
+  const isLayawaySale = Boolean(layaway);
   const remainingDuePence = sale?.tenderSummary.remainingPence ?? 0;
-  const depositPaidPence = saleContext.type === "WORKSHOP" ? saleContext.depositPaidPence ?? 0 : 0;
+  const workshopDepositPaidPence = saleContext.type === "WORKSHOP" ? saleContext.depositPaidPence ?? 0 : 0;
+  const depositPaidPence = isLayawaySale ? layaway?.depositPaidPence ?? 0 : workshopDepositPaidPence;
   const discountAppliedPence = 0;
-  const contextRemainingPence = Math.max(activeTotal - depositPaidPence, 0);
+  const contextRemainingPence = Math.max(activeTotal - workshopDepositPaidPence, 0);
   const payablePence = sale ? remainingDuePence : contextRemainingPence;
+  const layawayPaymentAmountPence = parseCurrencyInputToPence(layawayPaymentAmount);
+  const paymentAmountPence = sale
+    ? isLayawaySale
+      ? layawayPaymentAmountPence ?? 0
+      : remainingDuePence
+    : contextRemainingPence;
+  const paymentAmountValidationMessage =
+    !sale || !isLayawaySale || payablePence === 0
+      ? null
+      : layawayPaymentAmount.trim() === ""
+        ? "Enter the amount to take now."
+        : layawayPaymentAmountPence === null || layawayPaymentAmountPence <= 0
+          ? "Enter a valid payment amount in pounds."
+          : layawayPaymentAmountPence > payablePence
+            ? `Payment amount cannot exceed the remaining balance of ${formatMoney(payablePence)}.`
+            : null;
   const cashTenderedPence = parseCurrencyInputToPence(cashTenderedAmount);
   const voucherTenderedPence = parseCurrencyInputToPence(voucherTenderedAmount);
   const activeVoucherProviders = useMemo(
@@ -2945,14 +3041,6 @@ export const PosPage = () => {
     () => activeVoucherProviders.find((provider) => provider.id === selectedVoucherProviderId) ?? null,
     [activeVoucherProviders, selectedVoucherProviderId],
   );
-  const cashChangeDuePence =
-    selectedTenderMethod === "CASH" && cashTenderedPence !== null
-      ? Math.max(cashTenderedPence - payablePence, 0)
-      : 0;
-  const voucherOverpaymentPence =
-    selectedTenderMethod === "VOUCHER" && voucherTenderedPence !== null
-      ? Math.max(voucherTenderedPence - payablePence, 0)
-      : 0;
   const selectedVoucherCommissionPence =
     selectedVoucherProvider && voucherTenderedPence !== null
       ? Math.round((voucherTenderedPence * selectedVoucherProvider.commissionBps) / 10000)
@@ -2961,30 +3049,42 @@ export const PosPage = () => {
     selectedVoucherProvider && voucherTenderedPence !== null
       ? Math.max(voucherTenderedPence - selectedVoucherCommissionPence, 0)
       : 0;
+  const cashChangeDuePence =
+    selectedTenderMethod === "CASH"
+      && cashTenderedPence !== null
+      ? Math.max(cashTenderedPence - paymentAmountPence, 0)
+      : 0;
+  const voucherOverpaymentPence =
+    selectedTenderMethod === "VOUCHER" && voucherTenderedPence !== null
+      ? Math.max(voucherTenderedPence - paymentAmountPence, 0)
+      : 0;
   const cashOverpaymentCustomer = sale?.sale.customer ?? null;
   const cashOverpaymentCreditSelected =
-    selectedTenderMethod === "CASH"
+    !isLayawaySale
+    && selectedTenderMethod === "CASH"
     && cashChangeDuePence > 0
     && cashOverpaymentDisposition === "STORE_CREDIT";
   const voucherOverpaymentCreditRequired =
-    selectedTenderMethod === "VOUCHER" && voucherOverpaymentPence > 0;
+    !isLayawaySale
+    && selectedTenderMethod === "VOUCHER"
+    && voucherOverpaymentPence > 0;
   const overpaymentCreditRequired = cashOverpaymentCreditSelected || voucherOverpaymentCreditRequired;
   const cashValidationMessage =
-    selectedTenderMethod !== "CASH" || payablePence === 0
+    selectedTenderMethod !== "CASH" || paymentAmountPence === 0
       ? null
       : cashTenderedAmount.trim() === ""
-        ? "Enter the cash received."
+        ? isLayawaySale ? "Enter the cash taken now." : "Enter the cash received."
         : cashTenderedPence === null
           ? "Enter a valid amount in pounds."
-          : cashTenderedPence < payablePence
-            ? `Cash tendered is short by ${formatMoney(payablePence - cashTenderedPence)}.`
+          : cashTenderedPence < paymentAmountPence
+            ? `Cash tendered is short by ${formatMoney(paymentAmountPence - cashTenderedPence)}.`
             : null;
   const cashOverpaymentValidationMessage =
     cashOverpaymentCreditSelected && !cashOverpaymentCustomer?.id
       ? "Attach a customer before adding overpayment to store credit."
       : null;
   const voucherValidationMessage = (() => {
-    if (selectedTenderMethod !== "VOUCHER" || payablePence === 0) {
+    if (selectedTenderMethod !== "VOUCHER" || paymentAmountPence === 0) {
       return null;
     }
     if (voucherProvidersLoading) {
@@ -2999,8 +3099,11 @@ export const PosPage = () => {
     if (voucherTenderedPence === null) {
       return "Enter a valid voucher value in pounds.";
     }
-    if (voucherTenderedPence < payablePence) {
-      return `Voucher value is short by ${formatMoney(payablePence - voucherTenderedPence)}.`;
+    if (voucherTenderedPence < paymentAmountPence) {
+      return `Voucher value is short by ${formatMoney(paymentAmountPence - voucherTenderedPence)}.`;
+    }
+    if (isLayawaySale && voucherTenderedPence > paymentAmountPence) {
+      return "Voucher value must match the payment being taken now on a layaway.";
     }
     if (voucherOverpaymentPence > 0 && !cashOverpaymentCustomer?.id) {
       return "Attach a customer before adding voucher overpayment to store credit.";
@@ -3057,10 +3160,41 @@ export const PosPage = () => {
     || activeCustomerStatusLabel;
   const discountSummaryLabel = discountAppliedPence > 0 ? formatMoney(discountAppliedPence) : "None";
   const discountSummaryNote = discountAppliedPence > 0 ? "Applied to basket" : "Full price";
+  const depositSummaryTitle = isLayawaySale ? "Paid so far" : "Deposit";
   const depositSummaryLabel = depositPaidPence > 0 ? formatMoney(depositPaidPence) : "None";
-  const depositSummaryNote = depositPaidPence > 0 ? "Already paid" : "No deposit applied";
+  const depositSummaryNote = isLayawaySale
+    ? depositPaidPence > 0
+      ? "Payments recorded"
+      : "No payments recorded"
+    : depositPaidPence > 0
+      ? "Already paid"
+      : "No deposit applied";
   const showDiscountSummary = !checkoutMode || discountAppliedPence > 0;
-  const showDepositSummary = !checkoutMode || depositPaidPence > 0;
+  const showDepositSummary = isLayawaySale || !checkoutMode || depositPaidPence > 0;
+  const showLayawayDepositHint = !checkoutMode && depositPaidPence <= 0;
+  const depositSummaryContent = (
+    <>
+      <span className="muted-text">{depositSummaryTitle}</span>
+      <strong>{depositSummaryLabel}</strong>
+      <span className="pos-payment-summary-note">{depositSummaryNote}</span>
+      {showLayawayDepositHint ? (
+        <span className="pos-payment-summary-hint">Create layaway to take a deposit</span>
+      ) : null}
+    </>
+  );
+  const depositSummaryCard = !checkoutMode ? (
+    <button
+      type="button"
+      className="pos-payment-summary-card pos-payment-summary-card--action"
+      onClick={openLayawayPanel}
+    >
+      {depositSummaryContent}
+    </button>
+  ) : (
+    <div className="pos-payment-summary-card">
+      {depositSummaryContent}
+    </div>
+  );
   const storeCreditCustomer = sale?.sale.customer ?? selectedCustomer;
   const storeCreditValidationMessage =
     selectedTenderMethod === "STORE_CREDIT"
@@ -3132,14 +3266,9 @@ export const PosPage = () => {
   const cardTerminalDisplayAmountPence =
     mockCardTerminalState?.amountPence
     ?? cardTerminalSession?.amountPence
-    ?? payablePence;
+    ?? paymentAmountPence;
   const cardTerminalDisplaySetupLabel = hasConfiguredCardTerminal ? getCardTerminalSetupLabel(cardTerminalConfig) : "Demo mode";
   const saleContextCompactItems = [
-    {
-      label: "Customer",
-      value: activeCustomerName,
-      note: activeCustomerContact,
-    },
     {
       label: "Basket",
       value: basketSummaryLabel,
@@ -3152,7 +3281,7 @@ export const PosPage = () => {
     },
   ];
   const cardValidationMessage =
-    selectedTenderMethod !== "CARD" || payablePence <= 0
+    selectedTenderMethod !== "CARD" || paymentAmountPence <= 0
       ? null
       : hasInProgressCardTerminalSession
         ? "Card terminal payment is still in progress."
@@ -3162,26 +3291,27 @@ export const PosPage = () => {
             ? "Card payment was declined. Try again or choose another tender."
             : selectedCardPaymentMode === "TERMINAL"
               ? hasConfiguredCardTerminal
-                ? "Send card payment to the terminal before completing the sale."
-                : "Send card payment to the demo terminal or choose manual approval."
-              : "Confirm card approval before completing the sale.";
+                ? `Send ${isLayawaySale ? "this payment" : "card payment"} to the terminal before ${isLayawaySale ? "recording it" : "completing the sale"}.`
+                : `Send ${isLayawaySale ? "this payment" : "card payment"} to the demo terminal or choose manual approval.`
+              : `Confirm card approval before ${isLayawaySale ? "recording the payment" : "completing the sale"}.`;
   const manualTenderConfirmationCopy = isManualConfirmationTenderMethod(selectedTenderMethod)
     ? getManualTenderConfirmationCopy(selectedTenderMethod)
     : null;
   const manualTenderAmountPence =
     selectedTenderMethod === "VOUCHER" && voucherTenderedPence !== null
       ? voucherTenderedPence
-      : payablePence;
+      : paymentAmountPence;
   const manualTenderConfirmed = Boolean(
     manualTenderConfirmationCopy
     && confirmedManualTenderMethod === selectedTenderMethod,
   );
   const manualTenderValidationMessage =
-    manualTenderConfirmationCopy && payablePence > 0 && !manualTenderConfirmed
+    manualTenderConfirmationCopy && paymentAmountPence > 0 && !manualTenderConfirmed
       ? manualTenderConfirmationCopy.validationMessage
       : null;
   const tenderValidationMessage =
-    cashValidationMessage
+    paymentAmountValidationMessage
+    ?? cashValidationMessage
     ?? cashOverpaymentValidationMessage
     ?? voucherValidationMessage
     ?? storeCreditValidationMessage
@@ -3190,6 +3320,7 @@ export const PosPage = () => {
   const canCheckoutBasket = Boolean(basket && basket.items.length > 0 && !saleId);
   const canReturnSaleToBasket = Boolean(
     sale
+    && !sale.layaway
     && sale.tenderSummary.tenderedPence === 0
     && !sale.payment,
   );
@@ -3197,7 +3328,7 @@ export const PosPage = () => {
     if (!manualTenderConfirmationCopy || !isManualConfirmationTenderMethod(selectedTenderMethod)) {
       return;
     }
-    if (payablePence <= 0) {
+    if (paymentAmountPence <= 0) {
       success(`${getTenderMethodLabel(selectedTenderMethod)} is already covered.`);
       return;
     }
@@ -4027,10 +4158,11 @@ export const PosPage = () => {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => setLayawayPanelOpen(true)}
+                                    className="primary pos-layaway-button"
+                                    onClick={openLayawayPanel}
                                     disabled={!basket || basket.items.length === 0 || Boolean(saleId)}
                                   >
-                                    Layaway
+                                    Create layaway
                                   </button>
                                 <button
                                   type="button"
@@ -4201,13 +4333,6 @@ export const PosPage = () => {
                     >
                       {paymentBasketExpanded ? "Hide basket" : "View basket"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={openCustomerTools}
-                      aria-expanded={customerToolsExpanded}
-                    >
-                      Change customer
-                    </button>
                   </div>
                 </div>
               ) : null}
@@ -4234,14 +4359,10 @@ export const PosPage = () => {
                     </div>
                   ) : null}
                   {showDepositSummary ? (
-                    <div>
-                      <span className="muted-text">Deposit</span>
-                      <strong>{depositSummaryLabel}</strong>
-                      <span className="pos-payment-summary-note">{depositSummaryNote}</span>
-                    </div>
+                    depositSummaryCard
                   ) : null}
                 </div>
-              ) : (
+              ) : !isLayawaySale ? (
                 <div className="pos-payment-summary pos-payment-summary-retail">
                   <div className="pos-payment-total-block">
                     <span className="muted-text">Payable</span>
@@ -4259,14 +4380,10 @@ export const PosPage = () => {
                     </div>
                   ) : null}
                   {showDepositSummary ? (
-                    <div>
-                      <span className="muted-text">Deposit</span>
-                      <strong>{depositSummaryLabel}</strong>
-                      <span className="pos-payment-summary-note">{depositSummaryNote}</span>
-                    </div>
+                    depositSummaryCard
                   ) : null}
                 </div>
-              )}
+              ) : null}
 
               {customerOptionsOpen ? (
                 <div className="pos-customer-options-panel" id="pos-customer-options-panel">
@@ -4308,6 +4425,72 @@ export const PosPage = () => {
 
               {sale ? (
                 <>
+                  {isLayawaySale ? (
+                    <section className="quick-create-panel pos-layaway-payment-panel" aria-label="Layaway payment">
+                      <div className="pos-layaway-payment-panel__header">
+                        <div>
+                          <div className="pos-layaway-payment-panel__title-row">
+                            <span className="pos-card-terminal-pill">Layaway</span>
+                            <strong>{payablePence > 0 ? `${formatMoney(payablePence)} remaining` : "Fully paid"}</strong>
+                          </div>
+                          {layaway.requiresReview ? (
+                            <div className="pos-layaway-payment-panel__meta">
+                              <span className="pos-layaway-payment-panel__review-flag">Needs review</span>
+                            </div>
+                          ) : null}
+                        </div>
+                        {payablePence > 0 ? (
+                          <div className="pos-layaway-payment-panel__controls">
+                            <label>
+                              Amount to take now
+                              <input
+                                ref={layawayPaymentAmountInputRef}
+                                inputMode="decimal"
+                                value={layawayPaymentAmount}
+                                onChange={(event) => setLayawayPaymentAmount(event.target.value)}
+                                placeholder="0.00"
+                                disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                              />
+                            </label>
+                            <div className="pos-layaway-payment-panel__shortcuts" aria-label="Layaway amount shortcuts">
+                              <button
+                                type="button"
+                                onClick={() => applyLayawayPaymentShortcut(0.1)}
+                                disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                              >
+                                10%
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyLayawayPaymentShortcut(0.2)}
+                                disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                              >
+                                20%
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyLayawayPaymentShortcut(0.5)}
+                                disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                              >
+                                50%
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setLayawayPaymentAmount((payablePence / 100).toFixed(2))}
+                                disabled={completing || confirmingCardPayment || cardTerminalLoading || hasInProgressCardTerminalSession}
+                              >
+                                Full
+                              </button>
+                            </div>
+                            {paymentAmountValidationMessage ? (
+                              <p className="muted-text pos-cash-warning">{paymentAmountValidationMessage}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+
                   <section className="pos-payment-method-panel" aria-label="Payment method">
                     <div className="pos-payment-method-panel__heading">
                       <span>Payment method</span>
@@ -4413,7 +4596,7 @@ export const PosPage = () => {
                                   data-testid="pos-send-card-terminal-payment"
                                   onClick={() => void startCardTerminalPayment()}
                                   disabled={
-                                    payablePence <= 0
+                                    paymentAmountPence <= 0
                                     || completing
                                     || confirmingCardPayment
                                     || cardTerminalLoading
@@ -4425,7 +4608,7 @@ export const PosPage = () => {
                                     ? "Waiting..."
                                     : cardTerminalLoading
                                       ? "Starting..."
-                                      : payablePence <= 0
+                                      : paymentAmountPence <= 0
                                         ? "Card captured"
                                         : "Send to terminal"}
                                 </button>
@@ -4476,7 +4659,7 @@ export const PosPage = () => {
                                   data-testid="pos-send-card-terminal-payment"
                                   onClick={() => void startCardTerminalPayment()}
                                   disabled={
-                                    payablePence <= 0
+                                    paymentAmountPence <= 0
                                     || completing
                                     || confirmingCardPayment
                                     || hasPendingMockCardTerminalSession
@@ -4534,7 +4717,7 @@ export const PosPage = () => {
 
                               {hasApprovedMockCardTerminalSession ? (
                                 <p className="muted-text pos-card-terminal-status">
-                                  Auth {mockCardTerminalState.reference}. Complete sale when ready.
+                                  Auth {mockCardTerminalState.reference}. {isLayawaySale ? "Record the payment when ready." : "Complete sale when ready."}
                                 </p>
                               ) : null}
                             </div>
@@ -4545,7 +4728,7 @@ export const PosPage = () => {
                         <div>
                           <strong>Manual approval</strong>
                           <p className="muted-text">
-                            Confirm the card machine has approved {formatMoney(payablePence)}.
+                            Confirm the card machine has approved {formatMoney(paymentAmountPence)}.
                           </p>
                         </div>
                         <button
@@ -4554,14 +4737,14 @@ export const PosPage = () => {
                           data-testid="pos-confirm-card-payment"
                           onClick={() => void confirmManualCardPayment()}
                           disabled={
-                            payablePence <= 0
+                            paymentAmountPence <= 0
                             || completing
                             || confirmingCardPayment
                             || cardTerminalLoading
                             || hasInProgressCardTerminalSession
                           }
                         >
-                          {payablePence <= 0
+                          {paymentAmountPence <= 0
                             ? "Card confirmed"
                             : confirmingCardPayment
                               ? "Confirming..."
@@ -4576,7 +4759,7 @@ export const PosPage = () => {
                     <div className="quick-create-panel pos-cash-panel">
                       <div className="quick-create-grid pos-cash-grid">
                         <label>
-                          Amount tendered
+                          {isLayawaySale ? "Cash taken now" : "Amount tendered"}
                           <input
                             ref={cashTenderedInputRef}
                             data-testid="pos-cash-tendered"
@@ -4592,8 +4775,8 @@ export const PosPage = () => {
                       <div className="actions-inline pos-cash-shortcuts" role="group" aria-label="Quick cash amounts">
                         <button
                           type="button"
-                          onClick={() => setCashTenderedAmount((payablePence / 100).toFixed(2))}
-                          disabled={payablePence === 0 || completing}
+                          onClick={() => setCashTenderedAmount((paymentAmountPence / 100).toFixed(2))}
+                          disabled={paymentAmountPence === 0 || completing}
                         >
                           Exact
                         </button>
@@ -4611,8 +4794,8 @@ export const PosPage = () => {
 
                       <div className="pos-cash-summary" aria-label="Cash payment summary">
                         <div>
-                          <span>Due</span>
-                          <strong>{formatMoney(payablePence)}</strong>
+                          <span>{isLayawaySale ? "Taking now" : "Due"}</span>
+                          <strong>{formatMoney(paymentAmountPence)}</strong>
                         </div>
                         <div>
                           <span>Tendered</span>
@@ -4647,12 +4830,16 @@ export const PosPage = () => {
                               type="button"
                               className={cashOverpaymentDisposition === "STORE_CREDIT" ? "primary" : ""}
                               onClick={() => setCashOverpaymentDisposition("STORE_CREDIT")}
-                              disabled={completing || !cashOverpaymentCustomer?.id}
+                              disabled={completing || isLayawaySale || !cashOverpaymentCustomer?.id}
                             >
                               Store credit
                             </button>
                           </div>
-                          {cashOverpaymentCustomer?.id ? (
+                          {isLayawaySale ? (
+                            <p className="muted-text">
+                              Change can be given now. Store-credit rollover is only available on final sale completion.
+                            </p>
+                          ) : cashOverpaymentCustomer?.id ? (
                             <p className="muted-text">
                               Customer: {cashOverpaymentCustomer.name}
                             </p>
@@ -4675,7 +4862,7 @@ export const PosPage = () => {
                     <div className="quick-create-panel pos-store-credit-panel">
                       <strong>Store credit</strong>
                       <p className="muted-text">
-                        Uses the attached customer's available credit balance for the amount due.
+                        Uses the attached customer's available credit balance for {isLayawaySale ? "the amount being taken now." : "the amount due."}
                       </p>
                       {storeCreditValidationMessage ? (
                         <p className="muted-text pos-cash-warning">{storeCreditValidationMessage}</p>
@@ -4753,8 +4940,8 @@ export const PosPage = () => {
                           </label>
                           <div className="pos-voucher-summary" aria-label="Voucher payment summary">
                             <div>
-                              <span>Due</span>
-                              <strong>{formatMoney(payablePence)}</strong>
+                              <span>{isLayawaySale ? "Taking now" : "Due"}</span>
+                              <strong>{formatMoney(paymentAmountPence)}</strong>
                             </div>
                             <div>
                               <span>Voucher</span>
@@ -4767,7 +4954,11 @@ export const PosPage = () => {
                           </div>
                           {voucherOverpaymentPence > 0 ? (
                             <div className="pos-voucher-credit-note">
-                              {cashOverpaymentCustomer?.id ? (
+                              {isLayawaySale ? (
+                                <p className="muted-text pos-cash-warning">
+                                  Voucher payments on a layaway need to match the amount being taken now.
+                                </p>
+                              ) : cashOverpaymentCustomer?.id ? (
                                 <p className="muted-text">
                                   {formatMoney(voucherOverpaymentPence)} will be added to {cashOverpaymentCustomer.name}'s store credit.
                                   Change is not available for voucher payments.
@@ -4793,7 +4984,7 @@ export const PosPage = () => {
                         data-testid={`pos-confirm-${selectedTenderMethod.toLowerCase().replaceAll("_", "-")}`}
                         onClick={confirmManualTenderPayment}
                         disabled={
-                          payablePence <= 0
+                          paymentAmountPence <= 0
                           || completing
                           || manualTenderConfirmed
                           || (selectedTenderMethod === "VOUCHER" && Boolean(voucherValidationMessage))
@@ -4821,7 +5012,13 @@ export const PosPage = () => {
                       || Boolean(tenderValidationMessage)
                     }
                   >
-                    {completing ? "Completing..." : "Complete Sale"}
+                    {completing
+                      ? (isLayawaySale && payablePence > 0 ? "Recording..." : "Completing...")
+                      : isLayawaySale
+                        ? payablePence > 0
+                          ? "Record payment"
+                          : "Complete layaway"
+                        : "Complete Sale"}
                   </button>
                 ) : (
                   <button
@@ -4872,30 +5069,6 @@ export const PosPage = () => {
                         <strong>{formatMoney(basket?.totals.totalPence ?? 0)}</strong>
                       </div>
                       <label>
-                        <span>Deposit taken now</span>
-                        <input
-                          value={layawayDepositAmount}
-                          onChange={(event) => setLayawayDepositAmount(event.target.value)}
-                          placeholder="0.00"
-                          inputMode="decimal"
-                          disabled={savingLayaway}
-                        />
-                      </label>
-                      <label>
-                        <span>Deposit method</span>
-                        <select
-                          value={layawayDepositMethod}
-                          onChange={(event) => setLayawayDepositMethod(event.target.value as LayawayDepositMethod)}
-                          disabled={savingLayaway || layawayDepositAmount.trim().length === 0}
-                        >
-                          {LAYAWAY_DEPOSIT_METHOD_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
                         <span>Hold stock for days</span>
                         <input
                           value={layawayExpiryDays}
@@ -4913,8 +5086,12 @@ export const PosPage = () => {
                           disabled={savingLayaway}
                         />
                       </label>
+                      <div className="pos-layaway-summary">
+                        <span>Deposit</span>
+                        <strong>Take after saving</strong>
+                      </div>
                       <div className="pos-layaway-policy">
-                        Unpaid layaways release stock automatically after expiry. Part-paid layaways stay held and show as overdue for review.
+                        Save the layaway first, then take any deposit through the normal checkout payment flow. Unpaid layaways release stock automatically after expiry. Part-paid layaways stay held and show as overdue for review.
                       </div>
                       <button
                         type="button"
@@ -4922,7 +5099,7 @@ export const PosPage = () => {
                         onClick={() => void createLayaway()}
                         disabled={savingLayaway || !basket || basket.items.length === 0}
                       >
-                        {savingLayaway ? "Saving..." : "Save Layaway"}
+                        {savingLayaway ? "Saving..." : "Save layaway and continue to payment"}
                       </button>
                     </div>
                   </div>

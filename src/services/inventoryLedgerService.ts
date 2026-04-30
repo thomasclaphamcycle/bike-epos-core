@@ -287,7 +287,7 @@ const VALID_ADJUSTMENT_REASONS = new Set<InventoryAdjustmentReason>([
   "OTHER",
 ]);
 
-const getOnHandAtLocationTx = async (
+export const getOnHandAtLocationTx = async (
   tx: Prisma.TransactionClient,
   variantId: string,
   locationId: string,

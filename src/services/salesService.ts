@@ -1,4 +1,4 @@
-import { BasketStatus, PaymentMethod, PosSaleSource, Prisma, SaleTenderMethod } from "@prisma/client";
+import { BasketStatus, LayawayStatus, PaymentMethod, PosSaleSource, Prisma, SaleTenderMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, isUuid } from "../utils/http";
 import { getCustomerDisplayName } from "../utils/customerName";
@@ -396,6 +396,7 @@ const toSaleResponse = async (saleId: string) => {
     include: {
       customer: true,
       createdByStaff: true,
+      layaway: true,
       items: {
         include: {
           variant: {
@@ -429,6 +430,7 @@ const toSaleResponse = async (saleId: string) => {
   }
 
   const primaryPayment = sale.payments[0] ?? null;
+  const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
   const effectiveSaleSource = sale.source === PosSaleSource.RETAIL && sale.workshopJobId
     ? PosSaleSource.WORKSHOP
     : sale.source === PosSaleSource.RETAIL && sale.exchangeFromSaleId
@@ -440,6 +442,15 @@ const toSaleResponse = async (saleId: string) => {
       : effectiveSaleSource === PosSaleSource.EXCHANGE
         ? sale.exchangeFromSaleId
         : null);
+  const layawayPaidPence = sale.layaway
+    ? Math.max(sale.layaway.depositPaidPence, tenderedPence)
+    : 0;
+  const layawayIsOverdue = Boolean(
+    sale.layaway
+    && sale.layaway.expiresAt < new Date()
+    && !sale.layaway.completedAt
+    && !sale.layaway.cancelledAt,
+  );
 
   return {
     sale: {
@@ -473,6 +484,17 @@ const toSaleResponse = async (saleId: string) => {
           }
         : null,
     },
+    layaway: sale.layaway
+      ? {
+          id: sale.layaway.id,
+          status: sale.layaway.status,
+          totalPence: sale.layaway.totalPence,
+          depositPaidPence: layawayPaidPence,
+          remainingPence: Math.max(0, sale.layaway.totalPence - layawayPaidPence),
+          expiresAt: sale.layaway.expiresAt,
+          requiresReview: layawayIsOverdue && layawayPaidPence > 0,
+        }
+      : null,
     saleItems: sale.items.map((item) => ({
       id: item.id,
       saleId: item.saleId,
@@ -506,7 +528,6 @@ const toSaleResponse = async (saleId: string) => {
       createdByStaffId: tender.createdByStaffId,
     })),
     tenderSummary: (() => {
-      const tenderedPence = sale.tenders.reduce((sum, tender) => sum + tender.amountPence, 0);
       const calculatedChangeDuePence = Math.max(0, tenderedPence - sale.totalPence);
       const changeDuePence = sale.completedAt ? sale.changeDuePence : calculatedChangeDuePence;
       return {
@@ -1023,6 +1044,55 @@ export const listSaleTenders = async (saleId: string) => {
   });
 };
 
+const syncLayawayTenderStateTx = async (
+  tx: Prisma.TransactionClient,
+  saleId: string,
+  tenderedPence?: number,
+) => {
+  const layaway = await tx.layaway.findUnique({
+    where: { saleId },
+    select: {
+      id: true,
+      status: true,
+      completedAt: true,
+      cancelledAt: true,
+      stockReleasedAt: true,
+      depositPaidPence: true,
+    },
+  });
+
+  if (
+    !layaway
+    || layaway.completedAt
+    || layaway.cancelledAt
+    || layaway.stockReleasedAt
+    || layaway.status === "COMPLETED"
+    || layaway.status === "CANCELLED"
+    || layaway.status === "EXPIRED"
+  ) {
+    return;
+  }
+
+  const nextTenderedPence =
+    tenderedPence ?? (await getSaleTenderSummaryTx(tx, saleId)).tenderedPence;
+  const nextStatus: LayawayStatus = nextTenderedPence > 0 ? "PART_PAID" : "ACTIVE";
+
+  if (
+    layaway.depositPaidPence === nextTenderedPence
+    && layaway.status === nextStatus
+  ) {
+    return;
+  }
+
+  await tx.layaway.update({
+    where: { id: layaway.id },
+    data: {
+      depositPaidPence: nextTenderedPence,
+      status: nextStatus,
+    },
+  });
+};
+
 export const addSaleTender = async (
   saleId: string,
   input: SaleTenderInput,
@@ -1122,6 +1192,7 @@ export const addSaleTender = async (
     });
 
     const summary = await getSaleTenderSummaryTx(tx, saleId);
+    await syncLayawayTenderStateTx(tx, saleId, summary.tenderedPence);
     return { tender, summary };
   });
 };
@@ -1167,7 +1238,9 @@ export const deleteSaleTender = async (saleId: string, tenderId: string) => {
       where: { id: tenderId },
     });
 
-    return getSaleTenderSummaryTx(tx, saleId);
+    const summary = await getSaleTenderSummaryTx(tx, saleId);
+    await syncLayawayTenderStateTx(tx, saleId, summary.tenderedPence);
+    return summary;
   });
 };
 

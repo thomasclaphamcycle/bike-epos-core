@@ -83,6 +83,7 @@ export const PosCustomerCapturePanel = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const captureContextLabel = getCaptureContextLabel(target?.ownerType ?? "basket");
   const targetCustomer = getCaptureTargetCustomer(target);
+  const showCollapsedAttachedState = !isExpanded && Boolean(targetCustomer);
   const timeLeftLabel =
     formatCaptureRelativeMinutes(captureSession?.expiresAt, { suffix: "remaining" }) ?? "timing unavailable";
   const liveSessionWaiting = captureSession?.status === "ACTIVE" && Boolean(captureUrl);
@@ -281,16 +282,29 @@ export const PosCustomerCapturePanel = ({
             </p>
           </div>
           {!isExpanded ? (
-            <button
-              type="button"
-              className="primary pos-customer-capture-open"
-              data-testid="pos-customer-capture-open"
-              aria-label="Initiate NFC customer capture flow"
-              aria-expanded={isExpanded}
-              onClick={() => setIsExpanded(true)}
-            >
-              Initiate
-            </button>
+            targetCustomer ? (
+              <button
+                type="button"
+                className="secondary pos-customer-capture-open"
+                data-testid="pos-customer-capture-open"
+                aria-label="View NFC customer capture details"
+                aria-expanded={isExpanded}
+                onClick={() => setIsExpanded(true)}
+              >
+                Details
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="primary pos-customer-capture-open"
+                data-testid="pos-customer-capture-open"
+                aria-label="Initiate NFC customer capture flow"
+                aria-expanded={isExpanded}
+                onClick={() => setIsExpanded(true)}
+              >
+                Initiate
+              </button>
+            )
           ) : (
             <div className="pos-customer-capture-header-actions">
               {isCaptureEligible ? (
@@ -364,6 +378,16 @@ export const PosCustomerCapturePanel = ({
                 </div>
               </div>
             </div>
+          </div>
+        ) : showCollapsedAttachedState ? (
+          <div
+            className="pos-customer-capture-collapsed-status"
+            data-testid="pos-customer-capture-attached-state"
+          >
+            <strong>Customer already attached</strong>
+            <p className="muted-text pos-customer-capture-contact">
+              {formatCustomerContactSummary(targetCustomer)}
+            </p>
           </div>
         ) : null}
       </div>
