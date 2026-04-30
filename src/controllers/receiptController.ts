@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  emailSaleReceiptById,
   getReceiptByNumber,
   getSaleReceiptById,
   issueReceipt,
@@ -89,5 +90,10 @@ export const printSaleReceiptHandler = async (req: Request, res: Response) => {
     getRequestStaffActorId(req),
     getRequestAuditActor(req),
   );
+  res.status(202).json(result);
+};
+
+export const emailSaleReceiptHandler = async (req: Request, res: Response) => {
+  const result = await emailSaleReceiptById(req.params.saleId);
   res.status(202).json(result);
 };

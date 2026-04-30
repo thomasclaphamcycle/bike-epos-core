@@ -883,6 +883,7 @@ export const completeSaleIfEligibleTx = async (
       completedAt: sale.completedAt,
       changeDuePence: sale.changeDuePence,
       creditedChangePence: 0,
+      receiptUrl: `/sales/${encodeURIComponent(sale.id)}/receipt`,
       customerId: sale.customerId,
       workshopJobId: sale.workshopJobId,
       bikeId: sale.workshopJob?.bikeId ?? null,
@@ -985,6 +986,7 @@ export const completeSaleIfEligibleTx = async (
     completedAt,
     changeDuePence: updatedSale.changeDuePence,
     creditedChangePence,
+    receiptUrl: `/sales/${encodeURIComponent(updatedSale.id)}/receipt`,
     totalPence: sale.totalPence,
     customerId: sale.customerId,
     workshopJobId: sale.workshopJobId,
@@ -1012,6 +1014,7 @@ export const completeSaleIfEligible = async (
     completedAt: result.completedAt,
     changeDuePence: result.changeDuePence,
     creditedChangePence: result.creditedChangePence ?? 0,
+    receiptUrl: result.receiptUrl,
   };
 };
 

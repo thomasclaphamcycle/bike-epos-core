@@ -11437,6 +11437,37 @@ button.primary.workshop-status-action {
   gap: 10px;
 }
 
+.dispatch-printer-defaults-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid #dbe5ef;
+}
+
+.dispatch-printer-default-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #d8e1ec;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.dispatch-printer-default-card span {
+  color: #5c6f83;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dispatch-printer-default-card strong {
+  color: #17283a;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
 .shipping-providers-list__items {
   display: grid;
   gap: 10px;
@@ -11449,7 +11480,7 @@ button.primary.workshop-status-action {
   background: rgba(255, 255, 255, 0.82);
   padding: 12px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   text-align: left;
 }
 
@@ -11496,12 +11527,52 @@ button.primary.workshop-status-action {
   font-size: 0.92rem;
 }
 
+.dispatch-printer-row__heading {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dispatch-printer-row__heading strong {
+  color: #17283a;
+  overflow-wrap: anywhere;
+}
+
+.dispatch-printer-row__subline {
+  color: #4e6479;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
 .shipping-provider-row__meta {
   font-size: 0.92rem;
 }
 
 .dispatch-printer-row__meta--muted {
   color: #627184;
+}
+
+.dispatch-printer-row__meta span:last-child {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.dispatch-printer-row__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dispatch-printer-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #cdd9e6;
+  background: #f6f9fc;
+  color: #3f566b;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 4px 8px;
 }
 
 .shipping-provider-row__meta--muted {
@@ -11520,6 +11591,25 @@ button.primary.workshop-status-action {
   gap: 8px;
 }
 
+.dispatch-printer-editor-sections {
+  padding: 0;
+}
+
+.dispatch-printer-editor-sections .store-info-grid {
+  padding-top: 14px;
+}
+
+.dispatch-printer-capability-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.dispatch-printer-routing-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .shipping-provider-editor__actions {
   display: flex;
   flex-wrap: wrap;
@@ -11529,6 +11619,11 @@ button.primary.workshop-status-action {
 @media (max-width: 960px) {
   .shipping-providers-layout,
   .dispatch-printers-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dispatch-printer-defaults-grid,
+  .dispatch-printer-routing-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -14462,6 +14557,15 @@ body.rota-row-drag-copy-active {
   color: #ffffff;
 }
 
+.success-receipt-action__spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #ffffff;
+  animation: pos-spin 0.85s linear infinite;
+}
+
 .success-receipt-action__icon svg {
   width: 30px;
   height: 30px;
@@ -14495,6 +14599,12 @@ body.rota-row-drag-copy-active {
   white-space: nowrap;
 }
 
+@keyframes pos-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .pos-side-column .success-links-sale {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -14505,6 +14615,22 @@ body.rota-row-drag-copy-active {
   justify-content: center;
   min-height: 34px;
   text-align: center;
+}
+
+.pos-side-column .success-links-sale .link-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cp-blue);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pos-side-column .success-links-sale .link-button:hover,
+.pos-side-column .success-links-sale .link-button:focus-visible {
+  text-decoration: underline;
+  outline: none;
 }
 
 .pos-side-column .success-links-sale .primary {
@@ -15437,6 +15563,20 @@ body.rota-row-drag-copy-active {
   cursor: not-allowed;
 }
 
+.pos-card-terminal-route__row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-card-terminal-route__editor {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .pos-workstation-warning {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -15633,6 +15773,12 @@ body.rota-row-drag-copy-active {
   margin-top: 6px;
   padding: 10px 12px;
   border-radius: 12px;
+}
+
+.pos-side-column .pos-card-terminal-route__editor .pos-workstation-picker {
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .pos-side-column .quick-create-grid {

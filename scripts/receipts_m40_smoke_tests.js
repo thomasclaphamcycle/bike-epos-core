@@ -174,6 +174,16 @@ const run = async () => {
     });
     created.variantId = variant.payload.id;
 
+    const customer = await apiJson({
+      path: "/api/customers",
+      method: "POST",
+      body: {
+        name: `M40 Customer ${token}`,
+        email: `m40.customer.${token}@example.com`,
+      },
+      cookie,
+    });
+
     await apiJson({
       path: "/api/inventory/adjustments",
       method: "POST",
@@ -222,6 +232,14 @@ const run = async () => {
     };
 
     const tenderSale = await createSaleViaBasket({});
+    await apiJson({
+      path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/customer`,
+      method: "PATCH",
+      body: {
+        customerId: customer.payload.id,
+      },
+      cookie,
+    });
 
     await apiJson({
       path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/tenders`,
@@ -360,6 +378,24 @@ const run = async () => {
       cookie,
     });
     assert.equal(legacySaleReceipt.payload.saleId, tenderSale.sale.id);
+    assert.equal(legacySaleReceipt.payload.customer?.email, customer.payload.email);
+
+    const emailedSaleReceipt = await apiJson({
+      path: `/api/sales/${encodeURIComponent(tenderSale.sale.id)}/receipt/email`,
+      method: "POST",
+      body: {},
+      cookie,
+    });
+    assert.equal(emailedSaleReceipt.status, 202, JSON.stringify(emailedSaleReceipt.payload));
+    assert.equal(emailedSaleReceipt.payload.recipientEmail, customer.payload.email);
+    assert.equal(
+      emailedSaleReceipt.payload.receiptNumber,
+      issuedSale.payload.receipt.receiptNumber,
+    );
+    assert.ok(
+      emailedSaleReceipt.payload.deliveryMode === "log"
+      || emailedSaleReceipt.payload.deliveryMode === "smtp",
+    );
 
     const receiptPrintAgent = await startPrintAgentServer({
       bindHost: "127.0.0.1",

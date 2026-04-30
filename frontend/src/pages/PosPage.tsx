@@ -7,7 +7,6 @@ import { useToasts } from "../components/ToastProvider";
 import { PosCustomerCapturePanel } from "../features/customerCapture/PosCustomerCapturePanel";
 import { usePosCustomerCapture } from "../features/customerCapture/usePosCustomerCapture";
 import {
-  getCaptureTargetCustomer,
   type PosCustomerCaptureTarget,
 } from "../features/customerCapture/posCustomerCapture";
 import {
@@ -59,6 +58,7 @@ const LazyCustomerProfilePage = lazy(async () => {
 });
 
 const ACTIVE_BASKET_KEY = "corepos_active_basket_id";
+const COMPLETED_SALE_STATE_KEY = "corepos.completedSaleState";
 
 type ProductSearchRow = {
   id: string;
@@ -361,6 +361,11 @@ type CompletedSaleState = {
   totalPaidPence: number;
   receiptPrintJob: ManagedPrintJobSummary | null;
   receiptPrinterName: string | null;
+};
+
+type PersistedCompletedSaleState = {
+  activeBasketId: string | null;
+  completedSale: CompletedSaleState;
 };
 
 const formatMoney = (pence: number) => `£${(pence / 100).toFixed(2)}`;
@@ -743,6 +748,7 @@ export const PosPage = () => {
   const [selectedTenderMethod, setSelectedTenderMethod] = useState<TenderMethod>("CARD");
   const [selectedCardPaymentMode, setSelectedCardPaymentMode] = useState<CardPaymentMode>(getInitialCardPaymentMode);
   const [confirmedManualTenderMethod, setConfirmedManualTenderMethod] = useState<ManualConfirmationTenderMethod | null>(null);
+  const [cardWorkstationEditorOpen, setCardWorkstationEditorOpen] = useState(false);
   const [posWorkstationState, setPosWorkstationState] = useState(() => getInitialPosWorkstationState());
   const [suggestedTillPointId, setSuggestedTillPointId] = useState<PosTillPointId | null>(null);
   const [cashTenderedAmount, setCashTenderedAmount] = useState("");
@@ -762,6 +768,9 @@ export const PosPage = () => {
   const [completedSaleEmailEditing, setCompletedSaleEmailEditing] = useState(false);
   const [completedSaleEmailDraft, setCompletedSaleEmailDraft] = useState("");
   const [savingCompletedSaleEmail, setSavingCompletedSaleEmail] = useState(false);
+  const [sendingCompletedSaleEmail, setSendingCompletedSaleEmail] = useState(false);
+  const [completedSaleEmailSent, setCompletedSaleEmailSent] = useState(false);
+  const [completedSaleRestoreAttempted, setCompletedSaleRestoreAttempted] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -889,6 +898,34 @@ export const PosPage = () => {
       window.cancelAnimationFrame(frame);
     };
   }, [completedSaleEmailEditing]);
+
+  useEffect(() => {
+    if (completedSale || saleId || completedSaleRestoreAttempted) {
+      return;
+    }
+
+    const stored = readStoredCompletedSaleState();
+    setCompletedSaleRestoreAttempted(true);
+    if (!stored) {
+      return;
+    }
+
+    if (basketId && stored.activeBasketId === basketId) {
+      setCompletedSale(stored.completedSale);
+      setReceiptUrl(stored.completedSale.receiptUrl);
+    }
+  }, [basketId, completedSale, completedSaleRestoreAttempted, saleId]);
+
+  useEffect(() => {
+    if (!completedSale) {
+      return;
+    }
+    persistCompletedSaleState(completedSale, basket?.id ?? basketId);
+  }, [basket?.id, basketId, completedSale]);
+
+  useEffect(() => {
+    setCompletedSaleEmailSent(false);
+  }, [completedSale?.saleId]);
 
   useEffect(() => {
     if (!enabledTenderMethods.includes(selectedTenderMethod)) {
@@ -1109,6 +1146,41 @@ export const PosPage = () => {
     localStorage.removeItem(ACTIVE_BASKET_KEY);
   };
 
+  const readStoredCompletedSaleState = (): PersistedCompletedSaleState | null => {
+    try {
+      const raw = window.sessionStorage.getItem(COMPLETED_SALE_STATE_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw) as PersistedCompletedSaleState;
+      return parsed?.completedSale?.saleId ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistCompletedSaleState = (nextCompletedSale: CompletedSaleState, activeBasketIdValue: string | null) => {
+    try {
+      window.sessionStorage.setItem(
+        COMPLETED_SALE_STATE_KEY,
+        JSON.stringify({
+          activeBasketId: activeBasketIdValue,
+          completedSale: nextCompletedSale,
+        } satisfies PersistedCompletedSaleState),
+      );
+    } catch {
+      // Session storage is a convenience for restoring the success screen after receipt navigation.
+    }
+  };
+
+  const clearStoredCompletedSaleState = () => {
+    try {
+      window.sessionStorage.removeItem(COMPLETED_SALE_STATE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  };
+
   const syncQuery = (next: { basketId?: string | null; saleId?: string | null }) => {
     // Ignore late async POS updates once the route has unmounted so they cannot
     // navigate the SPA back to /pos after the user has left the page.
@@ -1272,11 +1344,8 @@ export const PosPage = () => {
     success,
     error,
   });
-  const hasCustomerCaptureTargetCustomer = Boolean(getCaptureTargetCustomer(customerCaptureTarget));
   const showCustomerCapturePanel = showCustomerPanel && (
-    !compactCustomerRail
-    || !selectedCustomer
-    || hasCustomerCaptureTargetCustomer
+    !selectedCustomer
     || customerToolsExpanded
     || Boolean(captureSession)
     || Boolean(captureCompletionSummary)
@@ -2424,13 +2493,13 @@ export const PosPage = () => {
       return;
     }
 
-    const result = await apiPost<CompleteSaleResult>(
-      `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
-      {},
-    );
-    setCompletedSale({
+      const result = await apiPost<CompleteSaleResult>(
+        `/api/sales/${encodeURIComponent(sale.sale.id)}/complete`,
+        {},
+      );
+    const nextCompletedSale = {
       saleId: sale.sale.id,
-      receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
+      receiptUrl: result.receiptUrl || `/sales/${encodeURIComponent(sale.sale.id)}/receipt`,
       changeDuePence: result.changeDuePence,
       tenderMethod: "CARD",
       customerId: sale.sale.customer?.id ?? selectedCustomer?.id ?? null,
@@ -2441,12 +2510,14 @@ export const PosPage = () => {
       totalPaidPence: sale.sale.totalPence,
       receiptPrintJob: null,
       receiptPrinterName: null,
-    });
-    setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
+    };
+    setCompletedSale(nextCompletedSale);
+    setReceiptUrl(result.receiptUrl || `/sales/${encodeURIComponent(sale.sale.id)}/receipt`);
     setCardTerminalSession(session);
     setCardTerminalMessage(getCardTerminalStatusLabel(session));
     clearCardTerminalPoll();
-    await createBasket({ announce: false });
+    const nextBasket = await createBasket({ announce: false });
+    persistCompletedSaleState(nextCompletedSale, nextBasket?.id ?? basketId);
     setSelectedTenderMethod(defaultTenderMethod);
     setCashTenderedAmount("");
     setCashOverpaymentDisposition("CHANGE");
@@ -2828,9 +2899,9 @@ export const PosPage = () => {
           : selectedTenderMethod === "VOUCHER"
             ? voucherPaymentPence ?? sale.tenderSummary.totalPence
             : sale.tenderSummary.totalPence;
-      setCompletedSale({
+      const nextCompletedSale = {
         saleId: sale.sale.id,
-        receiptUrl: result.receiptUrl || `/r/${sale.sale.id}`,
+        receiptUrl: result.receiptUrl || `/sales/${encodeURIComponent(sale.sale.id)}/receipt`,
         changeDuePence: result.changeDuePence,
         tenderMethod: selectedTenderMethod,
         customerId: sale.sale.customer?.id ?? selectedCustomer?.id ?? null,
@@ -2841,9 +2912,11 @@ export const PosPage = () => {
         totalPaidPence: saleCompletionTenderedPence,
         receiptPrintJob: null,
         receiptPrinterName: null,
-      });
-      setReceiptUrl(result.receiptUrl || `/r/${sale.sale.id}`);
-      await createBasket();
+      };
+      setCompletedSale(nextCompletedSale);
+      setReceiptUrl(result.receiptUrl || `/sales/${encodeURIComponent(sale.sale.id)}/receipt`);
+      const nextBasket = await createBasket();
+      persistCompletedSaleState(nextCompletedSale, nextBasket?.id ?? basketId);
       setSelectedTenderMethod(defaultTenderMethod);
       setCashTenderedAmount("");
       setCashOverpaymentDisposition("CHANGE");
@@ -3274,11 +3347,6 @@ export const PosPage = () => {
       value: basketSummaryLabel,
       note: formatMoney(sale ? sale.tenderSummary.totalPence : activeTotal),
     },
-    {
-      label: "Workstation",
-      value: posWorkstationTillLabel,
-      note: selectedCardTerminalRouteLabel,
-    },
   ];
   const cardValidationMessage =
     selectedTenderMethod !== "CARD" || paymentAmountPence <= 0
@@ -3338,6 +3406,7 @@ export const PosPage = () => {
   };
   const beginNextSaleFromSuccess = async () => {
     setCompletedSale(null);
+    clearStoredCompletedSaleState();
 
     if (basket?.items.length === 0 && !sale) {
       focusProductSearch();
@@ -3412,9 +3481,35 @@ export const PosPage = () => {
   const completedSaleReceiptUrl = completedSale ? toBackendUrl(completedSale.receiptUrl) : "";
   const completedSaleCustomerEmail = completedSale?.customerEmail ?? selectedCustomer?.email ?? null;
   const completedSaleEmailCustomerId = completedSale?.customerId ?? selectedCustomer?.id ?? null;
-  const completedSaleEmailHref = completedSaleCustomerEmail
-    ? `mailto:${encodeURIComponent(completedSaleCustomerEmail)}?subject=${encodeURIComponent("Your CorePOS receipt")}&body=${encodeURIComponent(`Thanks for your purchase.\n\nYour receipt is available here:\n${completedSaleReceiptUrl}`)}`
-    : null;
+  const openCompletedSalePath = (path: string) => {
+    if (!path) {
+      return;
+    }
+    if (completedSale) {
+      persistCompletedSaleState(completedSale, basket?.id ?? basketId);
+    }
+    window.location.assign(path);
+  };
+  const sendCompletedSaleEmail = async () => {
+    if (!completedSale) {
+      return;
+    }
+
+    setSendingCompletedSaleEmail(true);
+    try {
+      const response = await apiPost<{
+        receiptNumber: string;
+        recipientEmail: string;
+        deliveryMode: "log" | "smtp";
+      }>(`/api/sales/${encodeURIComponent(completedSale.saleId)}/receipt/email`, {});
+      setCompletedSaleEmailSent(true);
+      success(`Receipt emailed to ${response.recipientEmail}.`);
+    } catch (sendError) {
+      error(sendError instanceof Error ? sendError.message : "Failed to send receipt email.");
+    } finally {
+      setSendingCompletedSaleEmail(false);
+    }
+  };
 
   const completedSalePanel = completedSale ? (
     <div className="success-panel success-panel-sale">
@@ -3471,19 +3566,40 @@ export const PosPage = () => {
         </div>
       ) : null}
       <div className="success-receipt-actions" aria-label="Receipt options">
-        {completedSaleEmailHref ? (
-          <a className="success-receipt-action success-receipt-action--email" href={completedSaleEmailHref}>
+        {completedSaleCustomerEmail ? (
+          <button
+            type="button"
+            className="success-receipt-action success-receipt-action--email"
+            onClick={() => {
+              void sendCompletedSaleEmail();
+            }}
+            disabled={sendingCompletedSaleEmail || completedSaleEmailSent}
+          >
             <span className="success-receipt-action__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M4 7.5h16v10H4z" />
-                <path d="m4.8 8.4 7.2 5.1 7.2-5.1" />
-              </svg>
+              {sendingCompletedSaleEmail ? (
+                <span className="success-receipt-action__spinner" />
+              ) : completedSaleEmailSent ? (
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="m5 12.5 4.2 4.2L19 7.9" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M4 7.5h16v10H4z" />
+                  <path d="m4.8 8.4 7.2 5.1 7.2-5.1" />
+                </svg>
+              )}
             </span>
             <span>
-              <strong>Email receipt</strong>
+              <strong>
+                {sendingCompletedSaleEmail
+                  ? "Sending receipt..."
+                  : completedSaleEmailSent
+                    ? "Email sent"
+                    : "Email receipt"}
+              </strong>
               <small>{completedSaleCustomerEmail}</small>
             </span>
-          </a>
+          </button>
         ) : completedSaleEmailEditing ? (
           <form
             className="success-receipt-email-form"
@@ -3554,35 +3670,39 @@ export const PosPage = () => {
         </button>
       </div>
       <div className="success-links success-links-sale">
-        <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
-          New sale
-        </button>
-        <a
-          href={`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => openCompletedSalePath(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt/print`)}
           data-testid="pos-receipt-options-link"
         >
           Receipt options
-        </a>
-        <a
-          href={`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`}
-          target="_blank"
-          rel="noreferrer"
+        </button>
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => openCompletedSalePath(`/sales/${encodeURIComponent(completedSale.saleId)}/invoice/print`)}
           data-testid="pos-print-invoice-link"
         >
           Print A4 invoice
-        </a>
-        <a href={completedSaleReceiptUrl} target="_blank" rel="noreferrer">
+        </button>
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => openCompletedSalePath(completedSaleReceiptUrl)}
+        >
           Open receipt
-        </a>
-        <a
-          href={toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`)}
-          target="_blank"
-          rel="noreferrer"
+        </button>
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => openCompletedSalePath(toBackendUrl(`/sales/${encodeURIComponent(completedSale.saleId)}/receipt`))}
         >
           Open direct receipt page
-        </a>
+        </button>
+        <button type="button" className="primary" onClick={() => void beginNextSaleFromSuccess()}>
+          New sale
+        </button>
       </div>
       {completedSale.receiptPrintJob ? (
         <div className="success-panel-sale__print-status">
@@ -4552,15 +4672,71 @@ export const PosPage = () => {
                           </div>
 
                           <div className={`pos-card-terminal-route${posWorkstationConfigured ? "" : " pos-card-terminal-route--warning"}`}>
-                            <div className="pos-card-terminal-route__copy">
-                              <span>{posWorkstationTillLabel}</span>
-                              <strong>{cardTerminalRouteStatusLabel}</strong>
-                              {!posWorkstationConfigured ? (
-                                <em>Till point setup needed</em>
-                              ) : cardTerminalRouteOverrideActive ? (
-                                <em>Custom terminal route</em>
-                              ) : null}
+                            <div className="pos-card-terminal-route__row">
+                              <div className="pos-card-terminal-route__copy">
+                                <span>{posWorkstationTillLabel}</span>
+                                <strong>{cardTerminalRouteStatusLabel}</strong>
+                                {!posWorkstationConfigured ? (
+                                  <em>Till point setup needed</em>
+                                ) : cardTerminalRouteOverrideActive ? (
+                                  <em>Custom terminal route</em>
+                                ) : null}
+                              </div>
+                              <button
+                                type="button"
+                                className="button-link"
+                                onClick={() => setCardWorkstationEditorOpen((current) => !current)}
+                                disabled={hasInProgressCardTerminalSession}
+                                aria-expanded={cardWorkstationEditorOpen}
+                              >
+                                {cardWorkstationEditorOpen ? "Done" : "Change"}
+                              </button>
                             </div>
+                            {cardWorkstationEditorOpen ? (
+                              <div className="pos-card-terminal-route__editor">
+                                <label className="pos-workstation-picker">
+                                  <span>Till point</span>
+                                  <select
+                                    value={posWorkstationState.tillPointId ?? ""}
+                                    onChange={(event) => {
+                                      const nextTillPointId = event.target.value;
+                                      if (isPosTillPointId(nextTillPointId)) {
+                                        chooseTillPoint(nextTillPointId);
+                                      }
+                                    }}
+                                    disabled={hasInProgressCardTerminalSession}
+                                    aria-label="Till point"
+                                  >
+                                    <option value="" disabled>Choose till</option>
+                                    {POS_TILL_POINTS.map((tillPoint) => (
+                                      <option key={tillPoint.id} value={tillPoint.id}>
+                                        {tillPoint.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="pos-workstation-picker">
+                                  <span>Card terminal</span>
+                                  <select
+                                    value={selectedCardTerminalRouteId}
+                                    onChange={(event) => {
+                                      const nextTerminalRouteId = event.target.value;
+                                      if (isCardTerminalRouteId(nextTerminalRouteId)) {
+                                        chooseCardTerminalRoute(nextTerminalRouteId);
+                                      }
+                                    }}
+                                    disabled={!posWorkstationConfigured || hasInProgressCardTerminalSession}
+                                    aria-label="Card terminal route"
+                                  >
+                                    {CARD_TERMINAL_ROUTES.map((route) => (
+                                      <option key={route.id} value={route.id}>
+                                        {getCardTerminalRouteLabel(route.id, cardTerminals, cardTerminalConfig)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                            ) : null}
                           </div>
 
                           <div
