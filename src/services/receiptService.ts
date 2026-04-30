@@ -8,6 +8,7 @@ import {
   listStoreInfoSettings,
   type StoreInfoSettings,
 } from "./configurationService";
+import { sendEmailMessage } from "./emailService";
 
 const normalizeOptionalText = (value: string | undefined | null): string | undefined => {
   if (value === undefined || value === null) {
@@ -16,6 +17,26 @@ const normalizeOptionalText = (value: string | undefined | null): string | undef
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const isUniqueReceiptForSaleError = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError
+  && error.code === "P2002"
+  && (
+    (Array.isArray(error.meta?.target) && error.meta.target.some((entry) => String(entry).includes("saleId")))
+    || String(error.meta?.target ?? "").includes("saleId")
+    || error.message.includes("saleId")
+  );
+
+const resolvePublicAppUrl = (path: string) => {
+  const baseUrl =
+    normalizeOptionalText(process.env.PUBLIC_APP_URL)
+    ?? normalizeOptionalText(process.env.APP_BASE_URL)
+    ?? `http://localhost:${normalizeOptionalText(process.env.PORT) ?? "3100"}`;
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBaseUrl}${normalizedPath}`;
 };
 
 const toCustomerName = (customer: { firstName: string; lastName: string }) =>
@@ -174,7 +195,8 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
     throw new HttpError(400, "Invalid refund id", "INVALID_REFUND_ID");
   }
 
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     if (saleId) {
       const existing = await tx.receipt.findUnique({
         where: { saleId },
@@ -211,25 +233,30 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
 
       const settings = await getOrCreateReceiptSettingsTx(tx);
       const receiptNumber = await getNextReceiptNumberTx(tx);
-      const created = await tx.receipt.create({
-        data: {
-          saleId,
-          receiptNumber,
-          issuedByStaffId: issuedByStaffId ?? null,
-          shopName: settings.shopName,
-          shopAddress: settings.shopAddress,
-          vatNumber: settings.vatNumber,
-          footerText: settings.footerText,
-        },
-        select: {
-          id: true,
-          receiptNumber: true,
-          saleId: true,
-          refundId: true,
-          saleRefundId: true,
-          issuedAt: true,
-        },
-      });
+      let created;
+      try {
+        created = await tx.receipt.create({
+          data: {
+            saleId,
+            receiptNumber,
+            issuedByStaffId: issuedByStaffId ?? null,
+            shopName: settings.shopName,
+            shopAddress: settings.shopAddress,
+            vatNumber: settings.vatNumber,
+            footerText: settings.footerText,
+          },
+          select: {
+            id: true,
+            receiptNumber: true,
+            saleId: true,
+            refundId: true,
+            saleRefundId: true,
+            issuedAt: true,
+          },
+        });
+      } catch (createError) {
+        throw createError;
+      }
 
       await tx.sale.update({
         where: { id: saleId },
@@ -356,7 +383,32 @@ export const issueReceipt = async (input: IssueReceiptInput) => {
       receipt: toIssuedReceiptEnvelope(created),
       idempotent: false,
     };
-  });
+    });
+  } catch (error) {
+    if (!saleId || !isUniqueReceiptForSaleError(error)) {
+      throw error;
+    }
+
+    const concurrentReceipt = await prisma.receipt.findUnique({
+      where: { saleId },
+      select: {
+        id: true,
+        receiptNumber: true,
+        saleId: true,
+        refundId: true,
+        saleRefundId: true,
+        issuedAt: true,
+      },
+    });
+    if (!concurrentReceipt) {
+      throw error;
+    }
+
+    return {
+      receipt: toIssuedReceiptEnvelope(concurrentReceipt),
+      idempotent: true,
+    };
+  }
 };
 
 export type DetailedReceipt = {
@@ -1039,6 +1091,13 @@ export type SaleReceipt = {
   }>;
 };
 
+export type SaleReceiptEmailResult = {
+  receiptNumber: string;
+  recipientEmail: string;
+  deliveryMode: "log" | "smtp";
+  messageId: string | null;
+};
+
 export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> => {
   if (!isUuid(saleId)) {
     throw new HttpError(400, "Invalid sale id", "INVALID_SALE_ID");
@@ -1150,5 +1209,60 @@ export const getSaleReceiptById = async (saleId: string): Promise<SaleReceipt> =
       total,
     },
     payments: [...paymentsFromIntents, ...legacyPayments],
+  };
+};
+
+export const emailSaleReceiptById = async (saleId: string): Promise<SaleReceiptEmailResult> => {
+  const [receipt, store] = await Promise.all([
+    getSaleReceiptById(saleId),
+    listStoreInfoSettings(),
+  ]);
+
+  if (!receipt.customer?.email) {
+    throw new HttpError(400, "Attach a customer email before sending a receipt.", "CUSTOMER_EMAIL_MISSING");
+  }
+
+  const recipientEmail = receipt.customer.email.trim().toLowerCase();
+  const customerName = receipt.customer.name || "Customer";
+  const fromEmail =
+    normalizeOptionalText(process.env.EMAIL_FROM)
+    ?? normalizeOptionalText(store.email)
+    ?? "no-reply@corepos.local";
+  const fromName =
+    normalizeOptionalText(process.env.EMAIL_FROM_NAME)
+    ?? normalizeOptionalText(store.businessName)
+    ?? normalizeOptionalText(store.name)
+    ?? "CorePOS";
+  const receiptUrl = resolvePublicAppUrl(`/r/${encodeURIComponent(receipt.receiptNumber)}`);
+
+  const delivery = await sendEmailMessage({
+    to: recipientEmail,
+    from: {
+      email: fromEmail,
+      name: fromName,
+    },
+    subject: `${fromName}: your receipt ${receipt.receiptNumber}`,
+    text: [
+      `Hello ${customerName},`,
+      "",
+      `Thanks for your purchase from ${fromName}.`,
+      `Your receipt number is ${receipt.receiptNumber}.`,
+      "",
+      "View your receipt here:",
+      receiptUrl,
+    ].join("\n"),
+    html: [
+      `<p>Hello ${customerName},</p>`,
+      `<p>Thanks for your purchase from ${fromName}.</p>`,
+      `<p>Your receipt number is <strong>${receipt.receiptNumber}</strong>.</p>`,
+      `<p><a href="${receiptUrl}">View your receipt</a></p>`,
+    ].join(""),
+  });
+
+  return {
+    receiptNumber: receipt.receiptNumber,
+    recipientEmail,
+    deliveryMode: delivery.deliveryMode,
+    messageId: delivery.messageId,
   };
 };

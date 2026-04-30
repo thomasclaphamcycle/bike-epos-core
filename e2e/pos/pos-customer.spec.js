@@ -38,7 +38,22 @@ const expandPosCustomerCapturePanel = async (page) => {
     return;
   }
 
+  const startButton = page.getByTestId("pos-customer-capture-generate");
+  if (await startButton.isVisible().catch(() => false)) {
+    return;
+  }
+
   const initiateButton = page.getByTestId("pos-customer-capture-open");
+  if (!(await initiateButton.isVisible().catch(() => false))) {
+    const selectedCustomerChangeButton = page
+      .locator("section.pos-customer-panel")
+      .getByRole("button", { name: "Change" })
+      .first();
+    if (await selectedCustomerChangeButton.isVisible().catch(() => false)) {
+      await selectedCustomerChangeButton.click();
+    }
+  }
+
   await expect(initiateButton).toBeVisible();
   await initiateButton.click();
 
@@ -113,6 +128,7 @@ test("React POS customer search, attach, change, and checkout preserves final cu
 
   await page.getByTestId("pos-checkout-basket").click();
   await expect(page.getByTestId("pos-selected-customer")).toContainText("Attached to sale");
+  await expandPosCustomerCapturePanel(page);
   await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
   await expect(page.getByTestId("pos-customer-capture-panel")).toContainText(firstCustomer.email);
   await expect(page.getByTestId("pos-customer-capture-generate")).toHaveCount(0);
@@ -188,6 +204,7 @@ test("POS customer capture works before checkout and carries the customer into t
     }
     return chip.textContent();
   }).toContain("Taylor Rider");
+  await expandPosCustomerCapturePanel(page);
   await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
 
   await page.getByTestId("pos-product-search").fill(seeded.sku);
@@ -199,6 +216,7 @@ test("POS customer capture works before checkout and carries the customer into t
   await expect.poll(() => new URL(page.url()).searchParams.get("saleId")).toBeTruthy();
   const saleId = new URL(page.url()).searchParams.get("saleId");
 
+  await expandPosCustomerCapturePanel(page);
   await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
   await expect(page.getByTestId("pos-selected-customer")).toContainText(`capture-${token}@example.com`);
 
@@ -317,6 +335,7 @@ test("POS customer capture panel resets to ready after removing a captured baske
     return chip.textContent();
   }).toContain("Reset Rider");
 
+  await expandPosCustomerCapturePanel(page);
   await expect(page.getByTestId("pos-customer-capture-attached-state")).toContainText("Customer already attached");
   await page.getByTestId("pos-customer-clear").click();
 

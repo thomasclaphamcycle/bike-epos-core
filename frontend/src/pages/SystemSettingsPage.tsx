@@ -468,6 +468,39 @@ const getAllowedTransportModesForFamily = (
     ? ["DRY_RUN", "WINDOWS_PRINTER"]
     : ["DRY_RUN", "RAW_TCP", "WINDOWS_PRINTER"];
 
+const getPrinterFamilyLabel = (printerFamily: RegisteredPrinterFamily) =>
+  printerFamily === "ZEBRA_LABEL"
+    ? "Shipping label"
+    : printerFamily === "DYMO_LABEL"
+      ? "Product label"
+      : printerFamily === "OFFICE_DOCUMENT"
+        ? "Office / bike tag"
+        : "Receipt";
+
+const getPrinterTransportLabel = (transportMode: RegisteredPrinterTransportMode) =>
+  transportMode === "RAW_TCP"
+    ? "Raw TCP"
+    : transportMode === "WINDOWS_PRINTER"
+      ? "Windows helper"
+      : "Dry run";
+
+const getPrinterWorkflowLabels = (printer: Pick<RegisteredPrinter, "supportsShippingLabels" | "supportsProductLabels" | "supportsBikeTags" | "supportsReceipts">) =>
+  [
+    printer.supportsShippingLabels ? "Shipping labels" : null,
+    printer.supportsProductLabels ? "Product labels" : null,
+    printer.supportsBikeTags ? "Bike tags" : null,
+    printer.supportsReceipts ? "Receipts" : null,
+  ].filter(Boolean) as string[];
+
+const getPrinterConnectionSummary = (
+  printer: Pick<RegisteredPrinter, "transportMode" | "rawTcpHost" | "rawTcpPort" | "windowsPrinterName">,
+) =>
+  printer.transportMode === "RAW_TCP"
+    ? `${printer.rawTcpHost ?? "-"}:${printer.rawTcpPort ?? "-"}`
+    : printer.transportMode === "WINDOWS_PRINTER"
+      ? printer.windowsPrinterName || "Windows printer target missing"
+      : "Dry-run transport";
+
 const COMMON_TIME_ZONES = [
   "Europe/London",
   "Europe/Dublin",
@@ -3255,12 +3288,12 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
         <>
       <SurfaceCard>
         <SectionHeader
-          title="Registered Printers"
-          description="Register Zebra, Dymo, office-document, and thermal receipt printers, then choose the default target each managed print workflow should use."
+          title="Printer Setup"
+          description="Save local printers for shipping labels, product labels, bike tags, and receipts, then choose which default target each workflow should use."
           actions={(
             <div className="actions-inline">
               <button type="button" className="button-link" onClick={resetPrinterForm}>
-                New Printer
+                Add Printer
               </button>
               <button
                 type="button"
@@ -3276,19 +3309,38 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
 
         {loading ? (
           <EmptyState
-            title="Loading Registered Printers"
-            description="Fetching the registered printer list and current default shipping, product-label, bike-tag, and receipt targets."
+            title="Loading Printers"
+            description="Fetching saved printers and the current default targets for each print workflow."
           />
         ) : null}
 
         {!loading ? (
           <div className="dispatch-printers-layout">
             <section className="store-info-section dispatch-printers-list">
-              <h3>Registered Printers</h3>
+              <h3>Saved Printers</h3>
+              <div className="dispatch-printer-defaults-grid">
+                <div className="dispatch-printer-default-card">
+                  <span>Shipping</span>
+                  <strong>{printersPayload?.defaultShippingLabelPrinter?.name ?? "Not set"}</strong>
+                </div>
+                <div className="dispatch-printer-default-card">
+                  <span>Product label</span>
+                  <strong>{printersPayload?.defaultProductLabelPrinter?.name ?? "Not set"}</strong>
+                </div>
+                <div className="dispatch-printer-default-card">
+                  <span>Bike tag</span>
+                  <strong>{printersPayload?.defaultBikeTagPrinter?.name ?? "Not set"}</strong>
+                </div>
+                <div className="dispatch-printer-default-card">
+                  <span>Receipt</span>
+                  <strong>{printersPayload?.defaultReceiptPrinter?.name ?? "Not set"}</strong>
+                </div>
+              </div>
               {printersPayload?.printers.length ? (
                 <div className="dispatch-printers-list__items">
                   {printersPayload.printers.map((printer) => {
                     const isSelected = printer.id === selectedPrinterId;
+                    const workflowLabels = getPrinterWorkflowLabels(printer);
                     return (
                       <button
                         key={printer.id}
@@ -3297,7 +3349,17 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
                         onClick={() => selectPrinterForEditing(printer.id)}
                       >
                         <div className="dispatch-printer-row__topline">
-                          <strong>{printer.name}</strong>
+                          <div className="dispatch-printer-row__heading">
+                            <strong>{printer.name}</strong>
+                            <span className="dispatch-printer-row__subline">
+                              {getPrinterFamilyLabel(printer.printerFamily)} · {getPrinterTransportLabel(printer.transportMode)}
+                            </span>
+                          </div>
+                          <span className={`status-badge ${printer.isActive ? "status-ready" : "status-neutral"}`}>
+                            {printer.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        <div className="dispatch-printer-row__badges">
                           {printer.isDefaultShippingLabelPrinter ? (
                             <span className="status-badge status-ready">Default shipping</span>
                           ) : null}
@@ -3310,32 +3372,23 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
                           {printer.isDefaultReceiptPrinter ? (
                             <span className="status-badge status-info">Default receipt</span>
                           ) : null}
+                          {workflowLabels.map((label) => (
+                            <span key={label} className="dispatch-printer-chip">
+                              {label}
+                            </span>
+                          ))}
                         </div>
-                        <div className="dispatch-printer-row__meta">
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
                           <span>{printer.key}</span>
-                          <span>{printer.printerFamily}</span>
-                          <span>{printer.transportMode}</span>
-                        </div>
-                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
-                          <span>
-                            {[
-                              printer.supportsShippingLabels ? "Shipping labels" : null,
-                              printer.supportsProductLabels ? "Product labels" : null,
-                              printer.supportsBikeTags ? "Bike tags" : null,
-                              printer.supportsReceipts ? "Receipts" : null,
-                            ].filter(Boolean).join(" · ") || "No workflow capability"}
-                          </span>
-                          <span>{printer.isActive ? "Active" : "Inactive"}</span>
-                        </div>
-                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
                           <span>{printer.location || "No location set"}</span>
-                          <span>
-                            {printer.transportMode === "RAW_TCP"
-                              ? `${printer.rawTcpHost ?? "-"}:${printer.rawTcpPort ?? "-"}`
-                              : printer.transportMode === "WINDOWS_PRINTER"
-                                ? printer.windowsPrinterName || "Windows printer target missing"
-                                : "Dry-run transport"}
-                          </span>
+                        </div>
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
+                          <span>Connection</span>
+                          <span>{getPrinterConnectionSummary(printer)}</span>
+                        </div>
+                        <div className="dispatch-printer-row__meta dispatch-printer-row__meta--muted">
+                          <span>Model</span>
+                          <span>{printer.printerModelHint}</span>
                         </div>
                       </button>
                     );
@@ -3343,245 +3396,225 @@ export const SystemSettingsPage = ({ mode = "store-info" }: SystemSettingsPagePr
                 </div>
               ) : (
                 <EmptyState
-                  title="No registered printers yet"
-                  description="Create the first Zebra or Dymo printer so CorePOS can target managed local print paths instead of relying on browser paper handling."
+                  title="No saved printers yet"
+                  description="Add the first printer to give CorePOS a managed local print target instead of relying on browser print choices."
                 />
               )}
             </section>
 
             <section className="store-info-section dispatch-printers-editor">
-              <h3>{selectedPrinter ? "Edit Printer" : "Create Printer"}</h3>
-              <div className="purchase-form-grid store-info-grid">
-                <label>
-                  Printer name
-                  <input
-                    value={printerForm.name}
-                    onChange={(event) => setPrinterField("name", event.target.value)}
-                    placeholder="Dispatch Zebra GK420d"
-                  />
-                  {printerValidationErrors.name ? <span className="field-error">{printerValidationErrors.name}</span> : null}
-                </label>
-                <label>
-                  Internal key
-                  <input
-                    value={printerForm.key}
-                    onChange={(event) => setPrinterField("key", event.target.value.toUpperCase())}
-                    placeholder="DISPATCH_ZEBRA_GK420D"
-                  />
-                  {printerValidationErrors.key ? <span className="field-error">{printerValidationErrors.key}</span> : null}
-                </label>
-                <label>
-                  Printer family
-                  <select
-                    value={printerForm.printerFamily}
-                    onChange={(event) => setPrinterFamily(event.target.value as RegisteredPrinterFamily)}
-                  >
-                    <option value="ZEBRA_LABEL">Zebra shipping label</option>
-                    <option value="DYMO_LABEL">Dymo product label</option>
-                    <option value="OFFICE_DOCUMENT">Office document / bike tag</option>
-                    <option value="THERMAL_RECEIPT">Thermal receipt printer</option>
-                  </select>
-                </label>
-                <label>
-                  Model hint
-                  <input value={printerForm.printerModelHint} disabled />
-                </label>
-                <label>
-                  Transport mode
-                  <select
-                    value={printerForm.transportMode}
-                    onChange={(event) => {
-                      const nextTransportMode = event.target.value as RegisteredPrinterTransportMode;
-                      setPrinterForm((current) => ({
-                        ...current,
-                        transportMode: nextTransportMode,
-                        windowsPrinterName: nextTransportMode === "WINDOWS_PRINTER"
-                          ? current.windowsPrinterName || current.name
-                          : "",
-                        rawTcpHost: nextTransportMode === "RAW_TCP" ? current.rawTcpHost : "",
-                        rawTcpPort: nextTransportMode === "RAW_TCP" ? current.rawTcpPort || "9100" : "9100",
-                      }));
-                    }}
-                  >
-                    {allowedPrinterTransportModes.map((transportMode) => (
-                      <option key={transportMode} value={transportMode}>{transportMode}</option>
+              <h3>{selectedPrinter ? "Edit Printer" : "Add Printer"}</h3>
+              <div className="store-info-sections dispatch-printer-editor-sections">
+                <section className="store-info-section">
+                  <h3>Identity</h3>
+                  <div className="dispatch-printer-capability-strip">
+                    {getPrinterWorkflowLabels(printerFamilyCapabilities).map((label) => (
+                      <span key={label} className="dispatch-printer-chip">
+                        {label}
+                      </span>
                     ))}
-                  </select>
-                  {printerValidationErrors.transportMode ? <span className="field-error">{printerValidationErrors.transportMode}</span> : null}
-                </label>
-                <label>
-                  Location / notes label
-                  <input
-                    value={printerForm.location}
-                    onChange={(event) => setPrinterField("location", event.target.value)}
-                    placeholder="Dispatch bench"
-                  />
-                </label>
-                <label>
-                  Windows printer name
-                  <input
-                    value={printerForm.windowsPrinterName}
-                    onChange={(event) => setPrinterField("windowsPrinterName", event.target.value)}
-                    placeholder={
-                      printerForm.printerFamily === "OFFICE_DOCUMENT"
-                        ? "Xerox VersaLink C405"
-                        : printerForm.printerFamily === "THERMAL_RECEIPT"
-                          ? "Till Receipt Printer"
-                          : "DYMO LabelWriter 550"
-                    }
-                    disabled={printerForm.transportMode !== "WINDOWS_PRINTER"}
-                  />
-                  {printerValidationErrors.windowsPrinterName ? (
-                    <span className="field-error">{printerValidationErrors.windowsPrinterName}</span>
-                  ) : null}
-                </label>
-                <label>
-                  RAW_TCP host
-                  <input
-                    value={printerForm.rawTcpHost}
-                    onChange={(event) => setPrinterField("rawTcpHost", event.target.value)}
-                    placeholder="192.168.1.45"
-                    disabled={printerForm.transportMode !== "RAW_TCP"}
-                  />
-                  {printerValidationErrors.rawTcpHost ? (
-                    <span className="field-error">{printerValidationErrors.rawTcpHost}</span>
-                  ) : null}
-                </label>
-                <label>
-                  RAW_TCP port
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    step={1}
-                    value={printerForm.rawTcpPort}
-                    onChange={(event) => setPrinterField("rawTcpPort", event.target.value)}
-                    disabled={printerForm.transportMode !== "RAW_TCP"}
-                  />
-                  {printerValidationErrors.rawTcpPort ? (
-                    <span className="field-error">{printerValidationErrors.rawTcpPort}</span>
-                  ) : null}
-                </label>
-                <label className="store-info-grid-span">
-                  Notes
-                  <textarea
-                    rows={3}
-                    value={printerForm.notes}
-                    onChange={(event) => setPrinterField("notes", event.target.value)}
-                    placeholder="Windows dispatch machine beside packing bench."
-                  />
-                </label>
-                <label className="store-info-grid-span store-settings-checkbox">
-                  <span>Supports shipping labels</span>
-                  <div className="table-secondary">
-                    Printer family determines whether this printer is available to the web-order shipment flow.
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={printerFamilyCapabilities.supportsShippingLabels}
-                    disabled
-                  />
-                </label>
-                <label className="store-info-grid-span store-settings-checkbox">
-                  <span>Supports product labels</span>
-                  <div className="table-secondary">
-                    Dymo product-label printers are used by the inventory product-label page for direct local printing.
+                  <div className="purchase-form-grid store-info-grid">
+                    <label>
+                      Printer name
+                      <input
+                        value={printerForm.name}
+                        onChange={(event) => setPrinterField("name", event.target.value)}
+                        placeholder="Dispatch Zebra GK420d"
+                      />
+                      {printerValidationErrors.name ? <span className="field-error">{printerValidationErrors.name}</span> : null}
+                    </label>
+                    <label>
+                      Internal key
+                      <input
+                        value={printerForm.key}
+                        onChange={(event) => setPrinterField("key", event.target.value.toUpperCase())}
+                        placeholder="DISPATCH_ZEBRA_GK420D"
+                      />
+                      {printerValidationErrors.key ? <span className="field-error">{printerValidationErrors.key}</span> : null}
+                    </label>
+                    <label>
+                      Printer family
+                      <select
+                        value={printerForm.printerFamily}
+                        onChange={(event) => setPrinterFamily(event.target.value as RegisteredPrinterFamily)}
+                      >
+                        <option value="ZEBRA_LABEL">Zebra shipping label</option>
+                        <option value="DYMO_LABEL">Dymo product label</option>
+                        <option value="OFFICE_DOCUMENT">Office document / bike tag</option>
+                        <option value="THERMAL_RECEIPT">Thermal receipt printer</option>
+                      </select>
+                    </label>
+                    <label>
+                      Model hint
+                      <input value={printerForm.printerModelHint} disabled />
+                    </label>
+                    <label>
+                      Location
+                      <input
+                        value={printerForm.location}
+                        onChange={(event) => setPrinterField("location", event.target.value)}
+                        placeholder="Dispatch bench"
+                      />
+                    </label>
+                    <label className="store-settings-checkbox">
+                      <span>Printer is active</span>
+                      <div className="table-secondary">
+                        Inactive printers stay on record but disappear from live print routing.
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={printerForm.isActive}
+                        onChange={(event) => setPrinterField("isActive", event.target.checked)}
+                      />
+                    </label>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={printerFamilyCapabilities.supportsProductLabels}
-                    disabled
-                  />
-                </label>
-                <label className="store-info-grid-span store-settings-checkbox">
-                  <span>Supports bike tags</span>
-                  <div className="table-secondary">
-                    Office document printers drive one-click bike-tag direct printing through the Windows print helper.
+                </section>
+
+                <section className="store-info-section">
+                  <h3>Connection</h3>
+                  <div className="purchase-form-grid store-info-grid">
+                    <label>
+                      Transport mode
+                      <select
+                        value={printerForm.transportMode}
+                        onChange={(event) => {
+                          const nextTransportMode = event.target.value as RegisteredPrinterTransportMode;
+                          setPrinterForm((current) => ({
+                            ...current,
+                            transportMode: nextTransportMode,
+                            windowsPrinterName: nextTransportMode === "WINDOWS_PRINTER"
+                              ? current.windowsPrinterName || current.name
+                              : "",
+                            rawTcpHost: nextTransportMode === "RAW_TCP" ? current.rawTcpHost : "",
+                            rawTcpPort: nextTransportMode === "RAW_TCP" ? current.rawTcpPort || "9100" : "9100",
+                          }));
+                        }}
+                      >
+                        {allowedPrinterTransportModes.map((transportMode) => (
+                          <option key={transportMode} value={transportMode}>{transportMode}</option>
+                        ))}
+                      </select>
+                      {printerValidationErrors.transportMode ? <span className="field-error">{printerValidationErrors.transportMode}</span> : null}
+                    </label>
+                    <label>
+                      Windows printer name
+                      <input
+                        value={printerForm.windowsPrinterName}
+                        onChange={(event) => setPrinterField("windowsPrinterName", event.target.value)}
+                        placeholder={
+                          printerForm.printerFamily === "OFFICE_DOCUMENT"
+                            ? "Xerox VersaLink C405"
+                            : printerForm.printerFamily === "THERMAL_RECEIPT"
+                              ? "Till Receipt Printer"
+                              : "DYMO LabelWriter 550"
+                        }
+                        disabled={printerForm.transportMode !== "WINDOWS_PRINTER"}
+                      />
+                      {printerValidationErrors.windowsPrinterName ? (
+                        <span className="field-error">{printerValidationErrors.windowsPrinterName}</span>
+                      ) : null}
+                    </label>
+                    <label>
+                      RAW_TCP host
+                      <input
+                        value={printerForm.rawTcpHost}
+                        onChange={(event) => setPrinterField("rawTcpHost", event.target.value)}
+                        placeholder="192.168.1.45"
+                        disabled={printerForm.transportMode !== "RAW_TCP"}
+                      />
+                      {printerValidationErrors.rawTcpHost ? (
+                        <span className="field-error">{printerValidationErrors.rawTcpHost}</span>
+                      ) : null}
+                    </label>
+                    <label>
+                      RAW_TCP port
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        step={1}
+                        value={printerForm.rawTcpPort}
+                        onChange={(event) => setPrinterField("rawTcpPort", event.target.value)}
+                        disabled={printerForm.transportMode !== "RAW_TCP"}
+                      />
+                      {printerValidationErrors.rawTcpPort ? (
+                        <span className="field-error">{printerValidationErrors.rawTcpPort}</span>
+                      ) : null}
+                    </label>
+                    <label className="store-info-grid-span">
+                      Notes
+                      <textarea
+                        rows={3}
+                        value={printerForm.notes}
+                        onChange={(event) => setPrinterField("notes", event.target.value)}
+                        placeholder="Windows dispatch machine beside packing bench."
+                      />
+                    </label>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={printerFamilyCapabilities.supportsBikeTags}
-                    disabled
-                  />
-                </label>
-                <label className="store-info-grid-span store-settings-checkbox">
-                  <span>Supports receipts</span>
-                  <div className="table-secondary">
-                    Thermal receipt printers drive the managed ESC/POS receipt flow for POS, workshop, and reprints.
+                </section>
+
+                <section className="store-info-section">
+                  <h3>Workflow Routing</h3>
+                  <div className="purchase-form-grid store-info-grid dispatch-printer-routing-grid">
+                    {printerFamilyCapabilities.supportsShippingLabels ? (
+                      <label className="store-settings-checkbox">
+                        <span>Default for shipping labels</span>
+                        <div className="table-secondary">
+                          Used by dispatch when staff do not pick another printer.
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={printerForm.setAsDefaultShippingLabel}
+                          onChange={(event) =>
+                            setPrinterField("setAsDefaultShippingLabel", event.target.checked)}
+                        />
+                      </label>
+                    ) : null}
+                    {printerFamilyCapabilities.supportsProductLabels ? (
+                      <label className="store-settings-checkbox">
+                        <span>Default for product labels</span>
+                        <div className="table-secondary">
+                          Used by inventory direct-print product labels.
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={printerForm.setAsDefaultProductLabel}
+                          onChange={(event) =>
+                            setPrinterField("setAsDefaultProductLabel", event.target.checked)}
+                        />
+                      </label>
+                    ) : null}
+                    {printerFamilyCapabilities.supportsBikeTags ? (
+                      <label className="store-settings-checkbox">
+                        <span>Default for bike tags</span>
+                        <div className="table-secondary">
+                          Used by one-click bike-tag printing.
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={printerForm.setAsDefaultBikeTag}
+                          onChange={(event) =>
+                            setPrinterField("setAsDefaultBikeTag", event.target.checked)}
+                        />
+                      </label>
+                    ) : null}
+                    {printerFamilyCapabilities.supportsReceipts ? (
+                      <label className="store-settings-checkbox">
+                        <span>Default for receipts</span>
+                        <div className="table-secondary">
+                          Used when a workstation has no receipt override.
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={printerForm.setAsDefaultReceipt}
+                          onChange={(event) =>
+                            setPrinterField("setAsDefaultReceipt", event.target.checked)}
+                        />
+                      </label>
+                    ) : null}
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={printerFamilyCapabilities.supportsReceipts}
-                    disabled
-                  />
-                </label>
-                <label className="store-info-grid-span store-settings-checkbox">
-                  <span>Printer is active</span>
-                  <div className="table-secondary">
-                    Inactive printers stay on record for audit/history but cannot be used for live printing.
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={printerForm.isActive}
-                    onChange={(event) => setPrinterField("isActive", event.target.checked)}
-                  />
-                </label>
-                {printerFamilyCapabilities.supportsShippingLabels ? (
-                  <label className="store-info-grid-span store-settings-checkbox">
-                    <span>Make this the default shipping-label printer</span>
-                    <div className="table-secondary">
-                      Dispatch uses this printer automatically when staff do not choose another registered target.
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={printerForm.setAsDefaultShippingLabel}
-                      onChange={(event) =>
-                        setPrinterField("setAsDefaultShippingLabel", event.target.checked)}
-                    />
-                  </label>
-                ) : null}
-                {printerFamilyCapabilities.supportsProductLabels ? (
-                  <label className="store-info-grid-span store-settings-checkbox">
-                    <span>Make this the default product-label printer</span>
-                    <div className="table-secondary">
-                      Direct product-label printing uses this Dymo printer when staff do not choose another target.
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={printerForm.setAsDefaultProductLabel}
-                      onChange={(event) =>
-                        setPrinterField("setAsDefaultProductLabel", event.target.checked)}
-                    />
-                  </label>
-                ) : null}
-                {printerFamilyCapabilities.supportsBikeTags ? (
-                  <label className="store-info-grid-span store-settings-checkbox">
-                    <span>Make this the default bike-tag printer</span>
-                    <div className="table-secondary">
-                      One-click bike-tag printing uses this office printer when staff do not choose another target.
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={printerForm.setAsDefaultBikeTag}
-                      onChange={(event) =>
-                        setPrinterField("setAsDefaultBikeTag", event.target.checked)}
-                    />
-                  </label>
-                ) : null}
-                {printerFamilyCapabilities.supportsReceipts ? (
-                  <label className="store-info-grid-span store-settings-checkbox">
-                    <span>Make this the default receipt printer</span>
-                    <div className="table-secondary">
-                      Managed thermal receipt printing uses this printer when the current workstation does not override it.
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={printerForm.setAsDefaultReceipt}
-                      onChange={(event) =>
-                        setPrinterField("setAsDefaultReceipt", event.target.checked)}
-                    />
-                  </label>
-                ) : null}
+                </section>
               </div>
 
               {selectedPrinter ? (

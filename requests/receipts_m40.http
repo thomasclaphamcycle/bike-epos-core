@@ -40,6 +40,14 @@ GET {{baseUrl}}/api/sales/{{saleId}}/receipt
 X-Staff-Role: {{staffRole}}
 X-Staff-Id: {{staffId}}
 
+### Email sale receipt to the attached customer (STAFF+)
+POST {{baseUrl}}/api/sales/{{saleId}}/receipt/email
+Content-Type: application/json
+X-Staff-Role: {{staffRole}}
+X-Staff-Id: {{staffId}}
+
+{}
+
 ### Legacy sale receipt HTML (STAFF+, backward compatible)
 GET {{baseUrl}}/sales/{{saleId}}/receipt
 X-Staff-Role: {{staffRole}}

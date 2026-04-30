@@ -127,31 +127,47 @@ test("React POS checkout opens a printable thermal receipt page", async ({ page,
 
   const receiptOptionsLink = page.getByTestId("pos-receipt-options-link");
   await expect(receiptOptionsLink).toBeVisible();
-  const printReceiptHref = await receiptOptionsLink.getAttribute("href");
-  expect(printReceiptHref).toBeTruthy();
 
   const printInvoiceLink = page.getByTestId("pos-print-invoice-link");
   await expect(printInvoiceLink).toBeVisible();
-  const printInvoiceHref = await printInvoiceLink.getAttribute("href");
-  expect(printInvoiceHref).toBeTruthy();
+  await receiptOptionsLink.click();
+  await expect(page).toHaveURL(new RegExp("/sales/.+/receipt/print"));
+  await expect(page.getByTestId("sales-receipt")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print receipt" })).toBeVisible();
+  await expect(page.getByTestId("sales-receipt")).toContainText(firstVariant.product.name);
+  await expect(page.getByTestId("sales-receipt")).toContainText(secondVariant.product.name);
+  await expect(page.locator(".app-sidebar")).toHaveCount(0);
 
-  await page.goto(`${frontendBaseUrl}${printInvoiceHref}`);
+  await page.goBack();
+  await expect(page.getByText("Sale complete.")).toBeVisible();
+  await expect(page.getByTestId("pos-receipt-options-link")).toBeVisible();
+
+  await printInvoiceLink.click();
+  await expect(page).toHaveURL(new RegExp("/sales/.+/invoice/print"));
   await expect(page.getByTestId("sales-invoice-document")).toBeVisible();
   await expect(page.getByRole("button", { name: "Print A4 invoice" })).toBeVisible();
   await expect(page.getByTestId("sales-invoice-document")).toContainText(firstVariant.product.name);
   await expect(page.getByTestId("sales-invoice-document")).toContainText(secondVariant.product.name);
   await expect(page.locator(".app-sidebar")).toHaveCount(0);
 
-  await page.goto(`${frontendBaseUrl}${printReceiptHref}`);
-  await expect(page.getByTestId("sales-receipt")).toBeVisible();
-  await expect(page.getByTestId("sales-receipt")).toContainText(firstVariant.product.name);
-  await expect(page.getByTestId("sales-receipt")).toContainText(secondVariant.product.name);
-  await expect(page.getByRole("button", { name: "Print receipt" })).toBeVisible();
-  await expect(page.locator(".app-sidebar")).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByText("Sale complete.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open receipt" }).click();
+  await expect(page).toHaveURL(new RegExp("/sales/.+/receipt$"));
+  await expect(page.locator("body")).toContainText(firstVariant.product.name);
+  await expect(page.locator("body")).toContainText(secondVariant.product.name);
+
+  await page.goBack();
+  await expect(page.getByText("Sale complete.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open direct receipt page" }).click();
+  await expect(page).toHaveURL(new RegExp("/sales/.+/receipt$"));
+  await expect(page.locator("body")).toContainText(firstVariant.product.name);
+  await expect(page.locator("body")).toContainText(secondVariant.product.name);
 
   await page.emulateMedia({ media: "print" });
-  await expect(page.locator(".sales-receipt-print-page__actions")).toBeHidden();
-  await expect(page.getByTestId("sales-receipt")).toBeVisible();
+  await expect(page.locator("body")).toContainText(firstVariant.product.name);
   await page.emulateMedia({ media: "screen" });
 });
 

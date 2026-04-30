@@ -137,6 +137,54 @@ const ensureStockLocationForBusinessLocationTx = async (
   });
 };
 
+const ensureDefaultStockLocation = async (): Promise<StockLocation> => {
+  const existingDefault = await prisma.stockLocation.findFirst({
+    where: { isDefault: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existingDefault) {
+    return existingDefault;
+  }
+
+  return prisma.stockLocation.create({
+    data: {
+      name: DEFAULT_LOCATION_NAME,
+      isDefault: true,
+    },
+  });
+};
+
+const ensureStockLocationForBusinessLocation = async (
+  location: BusinessLocation,
+) => {
+  const defaultLocation = await ensureDefaultLocation();
+  if (location.id === defaultLocation.id) {
+    return ensureDefaultStockLocation();
+  }
+
+  const existing = await prisma.stockLocation.findFirst({
+    where: {
+      name: {
+        equals: location.name,
+        mode: "insensitive",
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.stockLocation.create({
+    data: {
+      name: location.name,
+      isDefault: false,
+    },
+  });
+};
+
 export const ensureDefaultStockLocationTx = async (tx: LocationTx): Promise<StockLocation> => {
   const existingDefault = await tx.stockLocation.findFirst({
     where: { isDefault: true },
@@ -184,8 +232,49 @@ export const ensureDefaultLocationTx = async (tx: LocationTx) => {
   }
 };
 
-export const ensureDefaultLocation = async () =>
-  prisma.$transaction((tx) => ensureDefaultLocationTx(tx));
+export const ensureDefaultLocation = async () => {
+  const existing = await prisma.location.findFirst({
+    where: {
+      code: {
+        equals: DEFAULT_LOCATION_CODE,
+        mode: "insensitive",
+      },
+    },
+  });
+  if (existing) {
+    await ensureDefaultStockLocation();
+    return existing;
+  }
+
+  try {
+    const created = await prisma.location.create({
+      data: {
+        name: DEFAULT_LOCATION_NAME,
+        code: DEFAULT_LOCATION_CODE,
+        isActive: true,
+      },
+    });
+    await ensureDefaultStockLocation();
+    return created;
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === "P2002") {
+      const retried = await prisma.location.findFirst({
+        where: {
+          code: {
+            equals: DEFAULT_LOCATION_CODE,
+            mode: "insensitive",
+          },
+        },
+      });
+      if (retried) {
+        await ensureDefaultStockLocation();
+        return retried;
+      }
+    }
+    throw error;
+  }
+};
 
 export const getOrCreateDefaultLocationTx = ensureDefaultLocationTx;
 export const getOrCreateDefaultLocation = ensureDefaultLocation;
@@ -201,8 +290,20 @@ export const resolveLocationByCodeOrThrowTx = async (
   return location;
 };
 
-export const resolveLocationByCodeOrThrow = async (code: string) =>
-  prisma.$transaction((tx) => resolveLocationByCodeOrThrowTx(tx, code));
+export const resolveLocationByCodeOrThrow = async (code: string) => {
+  const location = await prisma.location.findFirst({
+    where: {
+      code: {
+        equals: code,
+        mode: "insensitive",
+      },
+    },
+  });
+  if (!location) {
+    throw new HttpError(404, "Location not found", "LOCATION_NOT_FOUND");
+  }
+  return location;
+};
 
 export const resolveRequestLocation = async (req: Request) => {
   if (req.location) {
@@ -224,15 +325,11 @@ export const resolveRequestLocation = async (req: Request) => {
   }
 
   const code = headerCode ?? DEFAULT_LOCATION_CODE;
-  const location = await prisma.$transaction(async (tx) =>
-    code === DEFAULT_LOCATION_CODE
-      ? ensureDefaultLocationTx(tx)
-      : resolveLocationByCodeOrThrowTx(tx, code),
-  );
+  const location = code === DEFAULT_LOCATION_CODE
+    ? await ensureDefaultLocation()
+    : await resolveLocationByCodeOrThrow(code);
 
-  const stockLocation = await prisma.$transaction((tx) =>
-    ensureStockLocationForBusinessLocationTx(tx, location),
-  );
+  const stockLocation = await ensureStockLocationForBusinessLocation(location);
 
   req.location = toRequestLocation(location, stockLocation?.id ?? null);
   return req.location;
